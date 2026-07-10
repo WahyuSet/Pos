@@ -236,7 +236,7 @@ export default function CashierDashboard() {
                       onClick={() =>
                         updateStatusMutation.mutate({ orderId: order.id, status: OrderStatus.PROCESSING })
                       }
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
                     >
                       Mulai Masak (Kirim ke Dapur)
                     </button>
@@ -246,7 +246,7 @@ export default function CashierDashboard() {
                       onClick={() =>
                         updateStatusMutation.mutate({ orderId: order.id, status: OrderStatus.READY })
                       }
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
                     >
                       Tandai Siap Hidang
                     </button>
@@ -256,9 +256,19 @@ export default function CashierDashboard() {
                       onClick={() =>
                         updateStatusMutation.mutate({ orderId: order.id, status: OrderStatus.COMPLETED })
                       }
-                      className="w-full bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
+                      className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
                     >
                       Tutup Pesanan (Selesai)
+                    </button>
+                  )}
+                  {order.status !== OrderStatus.PENDING_PAYMENT && order.status !== OrderStatus.CANCELLED && (
+                    <button
+                      onClick={() =>
+                        window.open(`/receipt?orderId=${order.id}&restaurantId=${restaurantId}`, '_blank')
+                      }
+                      className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-border py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle"
+                    >
+                      Cetak Nota
                     </button>
                   )}
                 </div>
