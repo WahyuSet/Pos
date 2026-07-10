@@ -8,12 +8,13 @@
 
 ## 🆕 Update Log
 
-**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Lima hal dibangun:
+**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Enam hal dibangun:
 - **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe. (Exception yang diminta eksplisit user, di luar prioritas polish workflow.)
 - **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link. (Exception juga.)
 - **Pembatalan pesanan customer** — endpoint publik `POST .../orders/:orderId/cancel`, hanya untuk order `PENDING_PAYMENT`, dashboard kasir otomatis update via WebSocket. (Bagian dari polish workflow 🟡 Penting.)
 - **Notifikasi audio/visual order baru** — bunyi beep (Web Audio API, sintesis, tanpa file asset) + pulse visual di kasir (tab "Belum Bayar") dan dapur (highlight card order yang baru dikirim ke dapur). (Bagian dari polish workflow 🟡 Penting.)
 - **Validasi upload foto menu** — batas 2MB + validasi tipe MIME (gambar saja), pesan error Bahasa Indonesia, pre-check di client. (Bagian dari polish workflow 🟡 Penting.)
+- **Cetak Nota (print receipt)** — halaman `/receipt?orderId=...&restaurantId=...`, tombol "Cetak Nota" di kasir untuk order PAID/PROCESSING/READY/COMPLETED, reuse `getOrder` yang sudah ada (tanpa endpoint baru). (Exception yang diminta eksplisit user, item 🟢 Nice-to-have yang dipercepat.)
 
 **Keputusan menunda Pagination** (item 🟡 Penting lain di daftar yang sama): riset menemukan data masih kecil (7 menu, 0 order di seed) dan menu sudah pakai search+filter client-side yang butuh data lengkap sekaligus — pagination di situ justru merusak search tanpa manfaat nyata. Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu (tidak pernah dibersihkan), tapi user memilih menunda sampai itu benar-benar terasa jadi masalah nyata, bukan dikerjakan preventif. Kalau nanti dikerjakan, fokuskan ke situ saja (bukan GET /menus — lihat detail alasan di atas).
 
@@ -78,6 +79,7 @@ g:/Project/post/
 │       │   ├── login/page.tsx              — Login form
 │       │   ├── order/page.tsx              — Pemesanan customer (QR → menu → keranjang)
 │       │   ├── order/status/page.tsx       — Status pesanan + konfirmasi + tracker
+│       │   ├── receipt/page.tsx            — Nota print-friendly (dibuka dari dashboard kasir)
 │       │   ├── dashboard/admin/page.tsx    — Panel admin
 │       │   ├── dashboard/cashier/page.tsx  — Dashboard kasir
 │       │   └── dashboard/kitchen/page.tsx  — Dashboard dapur (KDS)
@@ -128,6 +130,7 @@ g:/Project/post/
 ### Kasir Dashboard (/dashboard/cashier)
 - 3 tab: Belum Bayar, Antrean Aktif, Selesai
 - Tombol aksi: Konfirmasi Lunas, Kirim Dapur, Siap Saji, Tutup
+- Tombol "Cetak Nota" (muncul untuk status PAID ke atas, kecuali Dibatalkan) → buka `/receipt?orderId=...&restaurantId=...` di tab baru, halaman print-friendly dengan tombol "Cetak" manual (`window.print()`)
 - Real-time via WebSocket
 
 ### Dapur Dashboard (/dashboard/kitchen)
@@ -150,7 +153,7 @@ g:/Project/post/
 
 ## ❌ Fitur yang BELUM ADA / Kurang
 
-> Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, **Notifikasi Audio/Visual di Kasir & Dapur**, dan **Validasi Ukuran Upload Foto Menu** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
+> Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, **Notifikasi Audio/Visual di Kasir & Dapur**, **Validasi Ukuran Upload Foto Menu**, dan **Print Struk/Receipt** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
 
 ### 🔴 KRITIS — Harus Dibangun
 
@@ -179,13 +182,12 @@ g:/Project/post/
 
 ### 🟢 NICE TO HAVE
 
-6. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
-7. Dark Mode — CSS variables untuk dark mode + toggle
-8. Riwayat Pesanan Customer — simpan orderId di localStorage
-9. Estimasi Waktu Masak — field menit di Menu
-10. Search Menu di Halaman Customer — saat ini hanya filter kategori
-11. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-12. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+6. Dark Mode — CSS variables untuk dark mode + toggle
+7. Riwayat Pesanan Customer — simpan orderId di localStorage
+8. Estimasi Waktu Masak — field menit di Menu
+9. Search Menu di Halaman Customer — saat ini hanya filter kategori
+10. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+11. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
