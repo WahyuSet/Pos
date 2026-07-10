@@ -120,6 +120,11 @@ export const api = {
       method: 'POST',
     }),
 
+  cancelOrder: (restaurantId: string, orderId: string) =>
+    fetchApi(`/restaurants/${restaurantId}/orders/${orderId}/cancel`, {
+      method: 'POST',
+    }),
+
   updatePaymentSettings: (restaurantId: string, settings: any) =>
     fetchApi(`/restaurants/${restaurantId}/payment-settings`, {
       method: 'PATCH',

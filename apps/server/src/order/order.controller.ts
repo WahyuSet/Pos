@@ -42,4 +42,13 @@ export class OrderController {
   ) {
     return this.orderService.updateOrderStatus(restaurantId, orderId, dto);
   }
+
+  @Public()
+  @Post(':orderId/cancel')
+  async cancelOrder(
+    @Param('restaurantId') restaurantId: string,
+    @Param('orderId') orderId: string,
+  ) {
+    return this.orderService.cancelOrder(restaurantId, orderId);
+  }
 }

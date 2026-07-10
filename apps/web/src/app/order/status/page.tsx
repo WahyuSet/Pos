@@ -43,12 +43,21 @@ function OrderStatusContent() {
     },
   });
 
+  const cancelOrderMutation = useMutation({
+    mutationFn: () => api.cancelOrder(restaurantId!, orderId!),
+    onSuccess: () => {
+      const redirectTableId = order?.table?.id;
+      const redirectUrl = redirectTableId ? `/order?tableId=${redirectTableId}` : '/order';
+      router.push(redirectUrl);
+    },
+    onError: (err: any) => {
+      alert(err.message || 'Gagal membatalkan pesanan');
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+    },
+  });
+
   const handleCancelAndReorder = () => {
-    // Customer tidak bisa membatalkan pesanan via API (perlu auth).
-    // Cukup redirect ke halaman pemesanan lagi — kasir bisa abaikan/batalkan pesanan lama dari dashboard.
-    const redirectTableId = order?.table?.id;
-    const redirectUrl = redirectTableId ? `/order?tableId=${redirectTableId}` : '/order';
-    router.push(redirectUrl);
+    cancelOrderMutation.mutate();
   };
 
   if (isLoading) {
@@ -227,12 +236,13 @@ function OrderStatusContent() {
               <button
                 id="btn-batal-pesan-ulang"
                 onClick={handleCancelAndReorder}
-                className="w-full flex items-center justify-center gap-2 bg-surface hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold py-2.5 rounded-sm text-xs uppercase tracking-wider transition-colors"
+                disabled={cancelOrderMutation.isPending}
+                className="w-full flex items-center justify-center gap-2 bg-surface hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 font-semibold py-2.5 rounded-sm text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                Batalkan &amp; Pesan Ulang
+                {cancelOrderMutation.isPending ? 'Membatalkan...' : 'Batalkan & Pesan Ulang'}
               </button>
             </div>
           </div>

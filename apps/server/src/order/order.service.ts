@@ -197,4 +197,39 @@ export class OrderService {
 
     return updatedOrder;
   }
+
+  async cancelOrder(restaurantId: string, orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { table: true, orderItems: true },
+    });
+
+    if (!order || order.restaurantId !== restaurantId) {
+      throw new NotFoundException('Pesanan tidak ditemukan');
+    }
+
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new BadRequestException('Pesanan sudah diproses dan tidak bisa dibatalkan');
+    }
+
+    const updatedOrder = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: OrderStatus.CANCELLED },
+      include: { table: true, orderItems: true },
+    });
+
+    const wsPayload: WsOrderPayload = {
+      orderId: updatedOrder.id,
+      restaurantId: updatedOrder.restaurantId,
+      tableNumber: updatedOrder.table.number,
+      status: updatedOrder.status as OrderStatus,
+      totalAmount: Number(updatedOrder.totalAmount),
+      itemsCount: updatedOrder.orderItems.reduce((acc, curr) => acc + curr.quantity, 0),
+      createdAt: updatedOrder.createdAt.toISOString(),
+    };
+
+    this.gateway.broadcastOrderUpdate(restaurantId, WS_EVENTS.ORDER_UPDATED, wsPayload);
+
+    return updatedOrder;
+  }
 }
