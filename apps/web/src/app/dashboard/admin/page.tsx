@@ -8,6 +8,8 @@ import { api } from '../../../lib/api';
 import { useAppStore } from '../../../lib/store';
 import { Role } from '@repo/types';
 
+const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024; // 2MB — harus sinkron dengan limit di server
+
 export default function AdminDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -57,6 +59,12 @@ export default function AdminDashboard() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      alert('Ukuran file terlalu besar. Maksimal 2MB.');
+      e.target.value = '';
+      return;
+    }
 
     setIsUploading(true);
     try {

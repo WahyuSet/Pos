@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseInterceptors, UseFilters, UploadedFile, BadRequestException } from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { CreateCategoryDto, CreateMenuDto, UpdateMenuDto } from './dto/menu.dto';
 import { Public } from '../auth/public.decorator';
@@ -8,6 +8,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { UploadSizeExceptionFilter } from './upload-size.filter';
+
+const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 @Controller('restaurants/:restaurantId')
 export class MenuController {
@@ -67,6 +71,7 @@ export class MenuController {
 
   @Roles(Role.OWNER, Role.MANAGER)
   @Post('menus/upload')
+  @UseFilters(UploadSizeExceptionFilter)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: (req, file, cb) => {
@@ -82,6 +87,13 @@ export class MenuController {
         cb(null, `${uniqueSuffix}${ext}`);
       },
     }),
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+    fileFilter: (req, file, cb) => {
+      if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+        return cb(new BadRequestException('Tipe file harus berupa gambar (JPG, PNG, WEBP, atau GIF)'), false);
+      }
+      cb(null, true);
+    },
   }))
   async uploadFile(@UploadedFile() file: any) {
     if (!file) {
