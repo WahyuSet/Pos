@@ -8,11 +8,14 @@
 
 ## 🆕 Update Log
 
-**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Empat hal dibangun:
+**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Lima hal dibangun:
 - **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe. (Exception yang diminta eksplisit user, di luar prioritas polish workflow.)
 - **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link. (Exception juga.)
 - **Pembatalan pesanan customer** — endpoint publik `POST .../orders/:orderId/cancel`, hanya untuk order `PENDING_PAYMENT`, dashboard kasir otomatis update via WebSocket. (Bagian dari polish workflow 🟡 Penting.)
 - **Notifikasi audio/visual order baru** — bunyi beep (Web Audio API, sintesis, tanpa file asset) + pulse visual di kasir (tab "Belum Bayar") dan dapur (highlight card order yang baru dikirim ke dapur). (Bagian dari polish workflow 🟡 Penting.)
+- **Validasi upload foto menu** — batas 2MB + validasi tipe MIME (gambar saja), pesan error Bahasa Indonesia, pre-check di client. (Bagian dari polish workflow 🟡 Penting.)
+
+**Keputusan menunda Pagination** (item 🟡 Penting lain di daftar yang sama): riset menemukan data masih kecil (7 menu, 0 order di seed) dan menu sudah pakai search+filter client-side yang butuh data lengkap sekaligus — pagination di situ justru merusak search tanpa manfaat nyata. Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu (tidak pernah dibersihkan), tapi user memilih menunda sampai itu benar-benar terasa jadi masalah nyata, bukan dikerjakan preventif. Kalau nanti dikerjakan, fokuskan ke situ saja (bukan GET /menus — lihat detail alasan di atas).
 
 Detail lengkap masing-masing ada di commit history repo (`WahyuSet/Pos` di GitHub) dan tercermin di bagian ✅/❌ di bawah.
 
@@ -97,7 +100,7 @@ g:/Project/post/
 
 ### Admin Panel (/dashboard/admin)
 - Tab Menu: CRUD menu hidangan (tambah, edit, hapus, toggle ketersediaan)
-  - Upload foto menu lokal → disimpan ke apps/server/uploads/
+  - Upload foto menu lokal → disimpan ke apps/server/uploads/, maksimal 2MB, harus tipe gambar (JPG/PNG/WEBP/GIF) — divalidasi di server (`fileFilter`+`limits.fileSize`, pesan Indonesia) dan pre-check di client
   - Filter berdasarkan kategori + pencarian teks real-time
 - Tab Kategori: CRUD kategori (edit inline)
 - Tab Meja / QR Code: CRUD nomor meja, edit inline, tombol "Lihat QR" → modal gambar QR code asli (qrcode.react, generate client-side), tombol Unduh PNG dan Salin Link
@@ -147,7 +150,7 @@ g:/Project/post/
 
 ## ❌ Fitur yang BELUM ADA / Kurang
 
-> Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, dan **Notifikasi Audio/Visual di Kasir & Dapur** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
+> Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, **Notifikasi Audio/Visual di Kasir & Dapur**, dan **Validasi Ukuran Upload Foto Menu** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
 
 ### 🔴 KRITIS — Harus Dibangun
 
@@ -170,23 +173,19 @@ g:/Project/post/
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-5. **Validasi Ukuran Upload Foto Menu**
-   - Upload foto tidak ada batas ukuran file
-   - Solusi: Tambah limits fileSize di Multer config server
-
-6. **Pagination**
-   - Semua data diload sekaligus (pesanan, menu)
-   - Solusi: Offset/cursor pagination di GET /orders dan GET /menus
+5. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
+   - Semua data diload sekaligus (pesanan, menu). Menu cuma 7 item dan sudah pakai search+filter client-side (butuh data lengkap, jangan paginate GET /menus tanpa rework search jadi server-side dulu). Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu — itu satu-satunya target yang masuk akal kalau dikerjakan nanti.
+   - Solusi (kalau/waktu dikerjakan): offset pagination + tombol "Muat Lebih Banyak" khusus di GET /orders untuk tab Riwayat Selesai kasir, bukan rewrite semua endpoint sekaligus
 
 ### 🟢 NICE TO HAVE
 
-7. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
-8. Dark Mode — CSS variables untuk dark mode + toggle
-9. Riwayat Pesanan Customer — simpan orderId di localStorage
-10. Estimasi Waktu Masak — field menit di Menu
-11. Search Menu di Halaman Customer — saat ini hanya filter kategori
-12. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-13. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+6. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
+7. Dark Mode — CSS variables untuk dark mode + toggle
+8. Riwayat Pesanan Customer — simpan orderId di localStorage
+9. Estimasi Waktu Masak — field menit di Menu
+10. Search Menu di Halaman Customer — saat ini hanya filter kategori
+11. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+12. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
@@ -277,7 +276,7 @@ Payment
 
 5. Pembatalan pesanan customer sudah pakai API sungguhan (POST .../orders/:orderId/cancel), tapi hanya berlaku selama order masih PENDING_PAYMENT — kalau kasir sudah proses duluan (race condition), request cancel akan ditolak 400 dan customer harus refresh untuk lihat status terbaru. Tidak ada tombol cancel manual di dashboard kasir.
 
-6. File upload gambar: tersimpan di apps/server/uploads/, diakses via /uploads/filename. Tidak ada cleanup file lama saat menu dihapus.
+6. File upload gambar: tersimpan di apps/server/uploads/, diakses via /uploads/filename. Tidak ada cleanup file lama saat menu dihapus. Maksimal 2MB, harus tipe gambar (JPG/PNG/WEBP/GIF) — divalidasi di `menu.controller.ts` (Multer `limits`+`fileFilter`) dan `upload-size.filter.ts` (pesan 413 Bahasa Indonesia).
 
 ---
 
