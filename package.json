@@ -1,0 +1,27 @@
+{
+  "name": "pos-order-makanan",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "db:generate": "turbo run db:generate",
+    "db:push": "turbo run db:push",
+    "db:seed": "turbo run db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "prettier": "^3.2.5"
+  },
+  "onlyBuiltDependencies": [
+    "@nestjs/core",
+    "@prisma/client",
+    "@prisma/engines",
+    "bcrypt",
+    "prisma",
+    "sharp",
+    "unrs-resolver"
+  ],
+  "packageManager": "pnpm@11.10.0"
+}

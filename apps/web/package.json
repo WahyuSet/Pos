@@ -1,0 +1,35 @@
+{
+  "name": "@repo/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@repo/types": "workspace:*",
+    "@repo/config-tailwind": "workspace:*",
+    "@tanstack/react-query": "^5.28.4",
+    "@hookform/resolvers": "^3.3.4",
+    "react-hook-form": "^7.51.2",
+    "zod": "^3.22.4",
+    "zustand": "^4.5.2",
+    "socket.io-client": "^4.7.5",
+    "lucide-react": "^0.363.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

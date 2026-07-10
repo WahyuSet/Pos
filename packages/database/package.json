@@ -1,0 +1,23 @@
+{
+  "name": "@repo/database",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "bcrypt": "^5.1.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.14.0",
+    "typescript": "^5.0.0",
+    "@types/bcrypt": "^5.0.2"
+  }
+}

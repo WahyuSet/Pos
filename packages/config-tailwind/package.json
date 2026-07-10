@@ -1,0 +1,7 @@
+{
+  "name": "@repo/config-tailwind",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./tailwind.config.js"
+}
