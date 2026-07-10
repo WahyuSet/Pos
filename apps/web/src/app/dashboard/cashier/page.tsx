@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api';
 import { useAppStore } from '../../../lib/store';
 import { useSocket } from '../../../lib/socket';
-import { OrderStatus, Role } from '@repo/types';
+import { playNewOrderSound, unlockAudioOnFirstClick } from '../../../lib/notification';
+import { OrderStatus, Role, WS_EVENTS } from '@repo/types';
 
 export default function CashierDashboard() {
   const router = useRouter();
@@ -14,6 +15,11 @@ export default function CashierDashboard() {
   const { user, token, logout } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'pending' | 'active' | 'completed'>('pending');
+  const [hasNewPendingOrder, setHasNewPendingOrder] = useState(false);
+
+  useEffect(() => {
+    unlockAudioOnFirstClick();
+  }, []);
 
   useEffect(() => {
     if (!token || user?.role !== Role.CASHIER) {
@@ -31,10 +37,19 @@ export default function CashierDashboard() {
   });
 
   // Real-time WebSocket listener
-  useSocket(restaurantId, (event, data) => {
-    console.log(`WebSocket event: ${event}`, data);
-    queryClient.invalidateQueries({ queryKey: ['cashier-orders', restaurantId] });
-  });
+  useSocket(
+    restaurantId,
+    useCallback(
+      (event, data) => {
+        if (event === WS_EVENTS.ORDER_CREATED) {
+          playNewOrderSound();
+          setHasNewPendingOrder(true);
+        }
+        queryClient.invalidateQueries({ queryKey: ['cashier-orders', restaurantId] });
+      },
+      [restaurantId, queryClient],
+    ),
+  );
 
   // Update order status mutation
   const updateStatusMutation = useMutation({
@@ -118,12 +133,15 @@ export default function CashierDashboard() {
         {/* Navigation Tabs */}
         <div className="flex gap-2 border-b border-border pb-px">
           <button
-            onClick={() => setActiveTab('pending')}
+            onClick={() => {
+              setActiveTab('pending');
+              setHasNewPendingOrder(false);
+            }}
             className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
               activeTab === 'pending'
                 ? 'border-primary text-primary bg-primary/5'
                 : 'border-transparent text-secondary hover:text-foreground'
-            }`}
+            } ${hasNewPendingOrder ? 'animate-pulse ring-2 ring-amber-400 rounded-sm' : ''}`}
           >
             Belum Bayar ({orders?.filter((o: any) => o.status === OrderStatus.PENDING_PAYMENT).length || 0})
           </button>

@@ -1,23 +1,29 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api';
 import { useAppStore } from '../../../lib/store';
 import { useSocket } from '../../../lib/socket';
-import { OrderStatus, Role } from '@repo/types';
+import { playNewOrderSound, unlockAudioOnFirstClick } from '../../../lib/notification';
+import { OrderStatus, Role, WS_EVENTS } from '@repo/types';
 
 export default function KitchenDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, token, logout } = useAppStore();
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || user?.role !== Role.KITCHEN) {
       router.push('/login');
     }
   }, [token, user, router]);
+
+  useEffect(() => {
+    unlockAudioOnFirstClick();
+  }, []);
 
   const restaurantId = user?.restaurantId;
 
@@ -29,10 +35,22 @@ export default function KitchenDashboard() {
   });
 
   // Real-time WebSocket listener
-  useSocket(restaurantId, (event, data) => {
-    console.log(`WebSocket event: ${event}`, data);
-    queryClient.invalidateQueries({ queryKey: ['kitchen-orders', restaurantId] });
-  });
+  useSocket(
+    restaurantId,
+    useCallback(
+      (event, data) => {
+        if (event === WS_EVENTS.ORDER_UPDATED && data.status === OrderStatus.PROCESSING) {
+          playNewOrderSound();
+          setHighlightedOrderId(data.orderId);
+          setTimeout(() => {
+            setHighlightedOrderId((curr) => (curr === data.orderId ? null : curr));
+          }, 5000);
+        }
+        queryClient.invalidateQueries({ queryKey: ['kitchen-orders', restaurantId] });
+      },
+      [restaurantId, queryClient],
+    ),
+  );
 
   // Complete cooking order mutation
   const completeCookingMutation = useMutation({
@@ -100,7 +118,11 @@ export default function KitchenDashboard() {
             orders?.map((order: any) => (
               <div
                 key={order.id}
-                className="bg-slate-900 border border-slate-800 rounded-md shadow-large overflow-hidden flex flex-col justify-between"
+                className={`bg-slate-900 border rounded-md shadow-large overflow-hidden flex flex-col justify-between ${
+                  order.id === highlightedOrderId
+                    ? 'border-emerald-400 ring-2 ring-emerald-400 animate-pulse'
+                    : 'border-slate-800'
+                }`}
               >
                 {/* Card Title */}
                 <div className="p-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
