@@ -8,10 +8,11 @@
 
 ## 🆕 Update Log
 
-**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Tiga hal dibangun sebagai exception yang diminta eksplisit oleh user:
-- **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe.
-- **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link.
-- **Pembatalan pesanan customer** — endpoint publik `POST .../orders/:orderId/cancel`, hanya untuk order `PENDING_PAYMENT`, dashboard kasir otomatis update via WebSocket.
+**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Empat hal dibangun:
+- **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe. (Exception yang diminta eksplisit user, di luar prioritas polish workflow.)
+- **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link. (Exception juga.)
+- **Pembatalan pesanan customer** — endpoint publik `POST .../orders/:orderId/cancel`, hanya untuk order `PENDING_PAYMENT`, dashboard kasir otomatis update via WebSocket. (Bagian dari polish workflow 🟡 Penting.)
+- **Notifikasi audio/visual order baru** — bunyi beep (Web Audio API, sintesis, tanpa file asset) + pulse visual di kasir (tab "Belum Bayar") dan dapur (highlight card order yang baru dikirim ke dapur). (Bagian dari polish workflow 🟡 Penting.)
 
 Detail lengkap masing-masing ada di commit history repo (`WahyuSet/Pos` di GitHub) dan tercermin di bagian ✅/❌ di bawah.
 
@@ -78,9 +79,10 @@ g:/Project/post/
 │       │   ├── dashboard/cashier/page.tsx  — Dashboard kasir
 │       │   └── dashboard/kitchen/page.tsx  — Dashboard dapur (KDS)
 │       └── lib/
-│           ├── api.ts    — Semua fungsi API client
-│           ├── store.ts  — Zustand store (cart + auth)
-│           └── socket.ts — Hook useSocket WebSocket
+│           ├── api.ts          — Semua fungsi API client
+│           ├── store.ts        — Zustand store (cart + auth)
+│           ├── socket.ts       — Hook useSocket WebSocket
+│           └── notification.ts — Sintesis bunyi beep (Web Audio API) untuk alert order baru
 └── packages/
     ├── database/prisma/
     │   ├── schema.prisma — Schema Prisma (SQLite)
@@ -130,6 +132,12 @@ g:/Project/post/
 - Tombol "Selesai Dimasak" → update ke READY
 - Real-time via WebSocket
 
+### Notifikasi Audio/Visual Order Baru
+- Kasir: bunyi beep saat `ORDER_CREATED` masuk + tombol tab "Belum Bayar" pulsing (animate-pulse + ring amber), hilang saat tab diklik
+- Dapur: bunyi beep saat order berstatus `PROCESSING` masuk (dikirim dari kasir) + ring hijau pulsing pada card order terkait, hilang otomatis ~5 detik
+- Suara disintesis via Web Audio API (`apps/web/src/lib/notification.ts`), tidak pakai file asset — aman dari masalah lisensi/ukuran bundle, gagal senyap kalau audio diblokir browser
+- Auto-unlock `AudioContext` pada klik pertama di halaman (`unlockAudioOnFirstClick`), jaga-jaga kalau dashboard di-refresh tanpa login ulang (auth persisted via Zustand)
+
 ### Pajak PPN Dinamis
 - DB: Restaurant.enableTax + Restaurant.taxRate (Float, default 10.0)
 - Backend hitung PPN inklusif saat createOrder
@@ -139,7 +147,7 @@ g:/Project/post/
 
 ## ❌ Fitur yang BELUM ADA / Kurang
 
-> Item **QR Code Generator Nyata** dan **Pembatalan Pesanan oleh Customer** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
+> Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, dan **Notifikasi Audio/Visual di Kasir & Dapur** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
 
 ### 🔴 KRITIS — Harus Dibangun
 
@@ -162,27 +170,23 @@ g:/Project/post/
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-5. **Notifikasi Audio/Visual di Kasir & Dapur**
-   - Tidak ada alert saat pesanan baru masuk
-   - Solusi: Sound alert + badge animasi saat order baru
-
-6. **Validasi Ukuran Upload Foto Menu**
+5. **Validasi Ukuran Upload Foto Menu**
    - Upload foto tidak ada batas ukuran file
    - Solusi: Tambah limits fileSize di Multer config server
 
-7. **Pagination**
+6. **Pagination**
    - Semua data diload sekaligus (pesanan, menu)
    - Solusi: Offset/cursor pagination di GET /orders dan GET /menus
 
 ### 🟢 NICE TO HAVE
 
-8. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
-9. Dark Mode — CSS variables untuk dark mode + toggle
-10. Riwayat Pesanan Customer — simpan orderId di localStorage
-11. Estimasi Waktu Masak — field menit di Menu
-12. Search Menu di Halaman Customer — saat ini hanya filter kategori
-13. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-14. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+7. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
+8. Dark Mode — CSS variables untuk dark mode + toggle
+9. Riwayat Pesanan Customer — simpan orderId di localStorage
+10. Estimasi Waktu Masak — field menit di Menu
+11. Search Menu di Halaman Customer — saat ini hanya filter kategori
+12. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+13. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
