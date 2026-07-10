@@ -6,6 +6,17 @@
 
 ---
 
+## 🆕 Update Log
+
+**2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Tiga hal dibangun sebagai exception yang diminta eksplisit oleh user:
+- **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe.
+- **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link.
+- **Pembatalan pesanan customer** — endpoint publik `POST .../orders/:orderId/cancel`, hanya untuk order `PENDING_PAYMENT`, dashboard kasir otomatis update via WebSocket.
+
+Detail lengkap masing-masing ada di commit history repo (`WahyuSet/Pos` di GitHub) dan tercermin di bagian ✅/❌ di bawah.
+
+---
+
 ## 🏗️ Ringkasan Proyek
 
 **POSKita** adalah sistem POS (Point of Sale) restoran berbasis web dengan fitur pemesanan mandiri pelanggan via scan QR Code meja. Dibangun sebagai monorepo Turborepo.
@@ -53,8 +64,9 @@ g:/Project/post/
 │   │   ├── auth/          — JWT, Guards, Decorators
 │   │   ├── restaurant/    — CRUD meja, pengaturan pembayaran & pajak
 │   │   ├── menu/          — CRUD kategori & menu, upload foto
-│   │   ├── order/         — Buat pesanan, update status, get order
+│   │   ├── order/         — Buat pesanan, update status, get order, cancel pesanan
 │   │   ├── payment/       — Simulasi pembayaran digital
+│   │   ├── voucher/       — CRUD voucher, validasi & redeem kode diskon
 │   │   └── gateway/       — Socket.IO WebSocket gateway
 │   └── web/src/
 │       ├── app/
@@ -86,7 +98,8 @@ g:/Project/post/
   - Upload foto menu lokal → disimpan ke apps/server/uploads/
   - Filter berdasarkan kategori + pencarian teks real-time
 - Tab Kategori: CRUD kategori (edit inline)
-- Tab Meja: CRUD nomor meja + QR link, edit inline
+- Tab Meja / QR Code: CRUD nomor meja, edit inline, tombol "Lihat QR" → modal gambar QR code asli (qrcode.react, generate client-side), tombol Unduh PNG dan Salin Link
+- Tab Voucher: CRUD kode voucher diskon persentase (kode, persen diskon, cap maksimal nominal, minimal belanja, tanggal mulai/berakhir, kuota pemakaian, toggle aktif/nonaktif)
 - Tab Pengaturan:
   - Toggle metode bayar: Tunai, E-Wallet, QRIS, Transfer Bank
   - Toggle Pajak PPN + input tarif PPN (1%-10%)
@@ -95,14 +108,14 @@ g:/Project/post/
 - Tampil daftar menu, filter kategori
 - Toggle tampilan List / Grid 2 kolom
 - Keranjang belanja persisten (Zustand + localStorage)
-- Checkout modal: item + catatan per-item + pilih metode bayar
-- Rincian harga: Subtotal, Pajak PPN, Total
+- Checkout modal: item + catatan per-item + pilih metode bayar + input Kode Voucher (validasi instan via endpoint publik)
+- Rincian harga: Subtotal, Diskon Voucher (jika ada kode diterapkan), Pajak PPN (dihitung dari subtotal setelah diskon), Total
 
 ### Status Pesanan Customer (/order/status)
 - Section Konfirmasi (muncul di atas saat PENDING_PAYMENT):
-  - Ringkasan item + PPN + total + metode bayar
+  - Ringkasan item + diskon voucher (jika ada) + PPN + total + metode bayar
   - Tombol "Ya, Pesanan Sudah Benar" → tracker aktif
-  - Tombol "Batalkan & Pesan Ulang" → redirect ke menu meja
+  - Tombol "Batalkan & Pesan Ulang" → memanggil API cancel (order jadi CANCELLED di DB), lalu redirect ke menu meja
 - Tracker Status 4 langkah (Menunggu Bayar → Diterima → Dimasak → Siap)
 - Instruksi bayar: Info kasir (Cash) atau Simulasi Bayar (Digital)
 - Real-time via WebSocket
@@ -126,59 +139,50 @@ g:/Project/post/
 
 ## ❌ Fitur yang BELUM ADA / Kurang
 
+> Item **QR Code Generator Nyata** dan **Pembatalan Pesanan oleh Customer** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
+
 ### 🔴 KRITIS — Harus Dibangun
 
-1. **QR Code Generator yang Nyata**
-   - qrCodeUrl hanya teks /order?tableId=... belum jadi gambar QR
-   - Solusi: Pakai library qrcode.react, generate QR image di tab meja admin
-
-2. **Pengaturan Profil Restoran**
+1. **Pengaturan Profil Restoran**
    - Admin tidak bisa ubah nama restoran, alamat, telepon dari dashboard
    - Solusi: Form update profil di tab Settings + endpoint PATCH /restaurants/:id
 
-3. **Laporan & Rekap Transaksi**
+2. **Laporan & Rekap Transaksi**
    - Tidak ada laporan penjualan (per hari, per menu, total pendapatan)
    - Solusi: Tab "Laporan" di admin dengan chart dan tabel rekap
 
-4. **Manajemen User / Staff**
+3. **Manajemen User / Staff**
    - Admin tidak bisa tambah/edit/hapus akun kasir atau dapur
    - User hanya bisa dibuat via seed.ts
    - Solusi: Tab "Staff" di admin untuk CRUD user + endpoint POST /restaurants/:id/users
 
-5. **Multi-tenant / Multi-restoran**
+4. **Multi-tenant / Multi-restoran**
    - Sistem hanya handle 1 restoran (seed hanya buat 1 data)
    - Solusi: Flow registrasi restoran baru, routing per restaurantId
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-6. **Pembatalan Pesanan oleh Customer**
-   - "Batalkan & Pesan Ulang" hanya redirect, pesanan lama tetap di DB (PENDING_PAYMENT)
-   - Solusi: Endpoint @Public() POST /orders/:orderId/cancel untuk customer
-
-7. **Validasi Meja Sudah Ada Pesanan Aktif**
-   - Customer bisa buat pesanan baru walau meja sudah punya PENDING/PAID/PROCESSING
-   - Solusi: Cek pesanan aktif saat loadmeja, redirect ke status pesanan aktif
-
-8. **Notifikasi Audio/Visual di Kasir & Dapur**
+5. **Notifikasi Audio/Visual di Kasir & Dapur**
    - Tidak ada alert saat pesanan baru masuk
    - Solusi: Sound alert + badge animasi saat order baru
 
-9. **Validasi Ukuran Upload Foto Menu**
+6. **Validasi Ukuran Upload Foto Menu**
    - Upload foto tidak ada batas ukuran file
    - Solusi: Tambah limits fileSize di Multer config server
 
-10. **Pagination**
-    - Semua data diload sekaligus (pesanan, menu)
-    - Solusi: Offset/cursor pagination di GET /orders dan GET /menus
+7. **Pagination**
+   - Semua data diload sekaligus (pesanan, menu)
+   - Solusi: Offset/cursor pagination di GET /orders dan GET /menus
 
 ### 🟢 NICE TO HAVE
 
-11. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
-12. Dark Mode — CSS variables untuk dark mode + toggle
-13. Riwayat Pesanan Customer — simpan orderId di localStorage
-14. Estimasi Waktu Masak — field menit di Menu
-15. Search Menu di Halaman Customer — saat ini hanya filter kategori
-16. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+8. Print Struk / Receipt — halaman /receipt/:orderId print-friendly
+9. Dark Mode — CSS variables untuk dark mode + toggle
+10. Riwayat Pesanan Customer — simpan orderId di localStorage
+11. Estimasi Waktu Masak — field menit di Menu
+12. Search Menu di Halaman Customer — saat ini hanya filter kategori
+13. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+14. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
@@ -195,16 +199,23 @@ User (Staff)
   └── role: OWNER | MANAGER | CASHIER | KITCHEN | WAITER
 
 Table
-  └── number, qrCodeUrl (path teks, belum gambar QR)
+  └── number, qrCodeUrl (path teks /order?tableId=...; gambar QR di-generate client-side di admin via qrcode.react, tidak disimpan sebagai file/binary)
 
 Category → menus[]
 
 Menu → orderItems[]
   └── imageUrl (URL eksternal ATAU /uploads/filename.ext jika upload lokal)
 
+Voucher
+  ├── code (unik per restoran, disimpan uppercase+trimmed)
+  ├── discountPercent, maxDiscountAmount (opsional cap nominal), minPurchaseAmount
+  ├── startsAt, expiresAt (opsional), maxRedemptions (opsional), usedCount
+  └── isActive
+
 Order
   ├── status: PENDING_PAYMENT | PAID | PROCESSING | READY | COMPLETED | CANCELLED
-  ├── totalAmount (INKLUSIF pajak jika enableTax=true)
+  ├── totalAmount (INKLUSIF pajak jika enableTax=true, DIHITUNG SETELAH diskon voucher)
+  ├── voucherCode, discountAmount (snapshot, bukan foreign key ke Voucher)
   └── orderItems[], payments[]
 
 Payment
@@ -236,6 +247,8 @@ Payment
 - POST /restaurants/:id/orders
 - GET /restaurants/:id/orders/:orderId
 - POST /restaurants/:id/orders/:orderId/simulate-payment
+- POST /restaurants/:id/orders/:orderId/cancel  (hanya berhasil kalau status masih PENDING_PAYMENT)
+- POST /restaurants/:id/vouchers/validate  (cek kode voucher, tanpa efek samping)
 
 ### Protected (butuh JWT Bearer token):
 - PATCH /restaurants/:id/payment-settings  (Owner/Manager)
@@ -244,6 +257,7 @@ Payment
 - CRUD /restaurants/:id/menus/:menuId
 - CRUD /restaurants/:id/categories/:categoryId
 - CRUD /restaurants/:id/tables/:tableId
+- CRUD /restaurants/:id/vouchers/:voucherId  (Owner/Manager)
 
 ---
 
@@ -257,7 +271,7 @@ Payment
 
 4. totalAmount INKLUSIF pajak: untuk dapatkan subtotal, hitung sum(orderItems.price * quantity).
 
-5. Pembatalan pesanan customer: hanya redirect, pesanan tetap di DB. Kasir harus cancel manual dari dashboard.
+5. Pembatalan pesanan customer sudah pakai API sungguhan (POST .../orders/:orderId/cancel), tapi hanya berlaku selama order masih PENDING_PAYMENT — kalau kasir sudah proses duluan (race condition), request cancel akan ditolak 400 dan customer harus refresh untuk lihat status terbaru. Tidak ada tombol cancel manual di dashboard kasir.
 
 6. File upload gambar: tersimpan di apps/server/uploads/, diakses via /uploads/filename. Tidak ada cleanup file lama saat menu dihapus.
 
