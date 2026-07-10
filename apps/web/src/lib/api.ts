@@ -134,4 +134,26 @@ export const api = {
       body: formData,
     });
   },
+
+  // Vouchers
+  getVouchers: (restaurantId: string) => fetchApi(`/restaurants/${restaurantId}/vouchers`),
+  createVoucher: (restaurantId: string, data: any) =>
+    fetchApi(`/restaurants/${restaurantId}/vouchers`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateVoucher: (restaurantId: string, voucherId: string, data: any) =>
+    fetchApi(`/restaurants/${restaurantId}/vouchers/${voucherId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteVoucher: (restaurantId: string, voucherId: string) =>
+    fetchApi(`/restaurants/${restaurantId}/vouchers/${voucherId}`, {
+      method: 'DELETE',
+    }),
+  validateVoucher: (restaurantId: string, code: string, subtotal: number) =>
+    fetchApi(`/restaurants/${restaurantId}/vouchers/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ code, subtotal }),
+    }),
 };

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { AppGateway } from '../gateway/app.gateway';
+import { VoucherService } from '../voucher/voucher.service';
 import { OrderStatus, PaymentStatus, WS_EVENTS, WsOrderPayload } from '@repo/types';
 import { randomUUID } from 'crypto';
 
@@ -10,6 +11,7 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private gateway: AppGateway,
+    private voucherService: VoucherService,
   ) {}
 
   async createOrder(restaurantId: string, dto: CreateOrderDto) {
@@ -50,21 +52,45 @@ export class OrderService {
       };
     });
 
-    let finalAmount = totalAmount;
+    let discountAmount = 0;
+    let voucherId: string | null = null;
+    let normalizedVoucherCode: string | null = null;
+    let voucherMaxRedemptions: number | null = null;
+    if (dto.voucherCode) {
+      const { voucher, discountAmount: computed } = await this.voucherService.evaluateVoucher(
+        restaurantId,
+        dto.voucherCode,
+        totalAmount,
+      );
+      discountAmount = computed;
+      voucherId = voucher.id;
+      normalizedVoucherCode = voucher.code;
+      voucherMaxRedemptions = voucher.maxRedemptions;
+    }
+
+    const discountedSubtotal = totalAmount - discountAmount;
+
+    let finalAmount = discountedSubtotal;
     if (restaurant.enableTax) {
       const taxRate = Number(restaurant.taxRate) || 10;
-      finalAmount = totalAmount + (totalAmount * taxRate) / 100;
+      finalAmount = discountedSubtotal + (discountedSubtotal * taxRate) / 100;
     }
 
     const initialStatus = OrderStatus.PENDING_PAYMENT;
 
     const order = await this.prisma.$transaction(async (tx) => {
+      if (voucherId) {
+        await this.voucherService.redeemVoucher(tx, voucherId, voucherMaxRedemptions);
+      }
+
       const newOrder = await tx.order.create({
         data: {
           restaurantId,
           tableId: dto.tableId,
           status: initialStatus,
           totalAmount: finalAmount,
+          voucherCode: normalizedVoucherCode,
+          discountAmount,
           orderItems: {
             create: orderItemsData,
           },

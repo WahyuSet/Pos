@@ -18,6 +18,9 @@ function OrderContent() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.E_WALLET);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [voucherError, setVoucherError] = useState('');
 
   // Fetch Table details
   const { data: table, isLoading: isTableLoading, error: tableError } = useQuery({
@@ -59,10 +62,29 @@ function OrderContent() {
     onSuccess: (data) => {
       clearCart();
       setIsCheckoutOpen(false);
+      setAppliedVoucher(null);
+      setVoucherInput('');
+      setVoucherError('');
       router.push(`/order/status?orderId=${data.id}&restaurantId=${restaurantId}`);
     },
     onError: (err: any) => {
       alert(err.message || 'Gagal membuat pesanan');
+    },
+  });
+
+  // Validate Voucher Mutation
+  const validateVoucherMutation = useMutation({
+    mutationFn: () => {
+      const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      return api.validateVoucher(restaurantId!, voucherInput.trim(), subtotal);
+    },
+    onSuccess: (res) => {
+      setAppliedVoucher({ code: res.voucher.code, discountAmount: res.discountAmount });
+      setVoucherError('');
+    },
+    onError: (err: any) => {
+      setAppliedVoucher(null);
+      setVoucherError(err.message || 'Voucher tidak valid');
     },
   });
 
@@ -83,6 +105,7 @@ function OrderContent() {
         quantity: item.quantity,
         notes: item.notes || '',
       })),
+      ...(appliedVoucher ? { voucherCode: appliedVoucher.code } : {}),
     };
 
     createOrderMutation.mutate(orderData);
@@ -361,7 +384,7 @@ function OrderContent() {
                         }
                         className="bg-primary text-white hover:bg-primary-hover px-4 py-2 rounded-sm text-xs font-semibold transition-colors uppercase tracking-wider"
                       >
-                        Tambah
+                        + Tambah
                       </button>
                     ) : (
                       <div className="flex items-center gap-3 bg-muted border border-border rounded-sm p-1">
@@ -510,36 +533,90 @@ function OrderContent() {
                   )}
                 </div>
               </div>
+
+              {/* Kode Voucher */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider">Kode Voucher</h4>
+                {!appliedVoucher ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Masukkan kode voucher"
+                      value={voucherInput}
+                      onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
+                      className="flex-1 bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none uppercase"
+                    />
+                    <button
+                      type="button"
+                      disabled={!voucherInput.trim() || validateVoucherMutation.isPending}
+                      onClick={() => validateVoucherMutation.mutate()}
+                      className="bg-primary hover:bg-primary-hover text-white px-4 rounded-sm text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {validateVoucherMutation.isPending ? '...' : 'Terapkan'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-sm px-3 py-2">
+                    <span className="text-xs font-bold text-green-700">
+                      Voucher {appliedVoucher.code} diterapkan (-Rp {appliedVoucher.discountAmount.toLocaleString('id-ID')})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppliedVoucher(null);
+                        setVoucherInput('');
+                        setVoucherError('');
+                      }}
+                      className="text-[10px] font-bold text-red-600 hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                )}
+                {voucherError && <p className="text-[10px] text-error">{voucherError}</p>}
+              </div>
             </div>
 
             {/* Submit Bar */}
             <div className="p-4 bg-muted border-t border-border space-y-3">
-              {restaurant?.enableTax ? (
-                <>
-                  <div className="flex justify-between items-center text-xs text-secondary">
-                    <span>Subtotal</span>
-                    <span>Rp {totalCartPrice.toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs text-secondary">
-                    <span>Pajak PPN ({restaurant.taxRate}%)</span>
-                    <span>Rp {Math.round((totalCartPrice * restaurant.taxRate) / 100).toLocaleString('id-ID')}</span>
-                  </div>
-                  <hr className="border-border border-dashed" />
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-bold text-slate-800">Total Pembayaran</span>
-                    <span className="text-lg font-bold text-primary">
-                      Rp {Math.round(totalCartPrice + (totalCartPrice * restaurant.taxRate) / 100).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-semibold text-secondary">Total Pembayaran</span>
-                  <span className="text-lg font-bold text-primary">
-                    Rp {totalCartPrice.toLocaleString('id-ID')}
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const discountAmount = appliedVoucher?.discountAmount ?? 0;
+                const discountedSubtotal = Math.max(0, totalCartPrice - discountAmount);
+                const taxAmount = restaurant?.enableTax
+                  ? Math.round((discountedSubtotal * restaurant.taxRate) / 100)
+                  : 0;
+                const grandTotal = discountedSubtotal + taxAmount;
+
+                return (
+                  <>
+                    {(discountAmount > 0 || restaurant?.enableTax) && (
+                      <div className="flex justify-between items-center text-xs text-secondary">
+                        <span>Subtotal</span>
+                        <span>Rp {totalCartPrice.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-tertiary font-semibold">
+                        <span>Diskon Voucher ({appliedVoucher?.code})</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    {restaurant?.enableTax && (
+                      <div className="flex justify-between items-center text-xs text-secondary">
+                        <span>Pajak PPN ({restaurant.taxRate}%)</span>
+                        <span>Rp {taxAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    <hr className="border-border border-dashed" />
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-sm font-bold text-slate-800">Total Pembayaran</span>
+                      <span className="text-lg font-bold text-primary">
+                        Rp {grandTotal.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
               <button
                 onClick={submitOrder}
                 disabled={createOrderMutation.isPending}

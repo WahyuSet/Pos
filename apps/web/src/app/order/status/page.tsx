@@ -105,8 +105,10 @@ function OrderStatusContent() {
     (sum: number, item: any) => sum + Number(item.price) * item.quantity,
     0
   );
+  const discountAmount = Number(order.discountAmount || 0);
+  const discountedSubtotal = subtotal - discountAmount;
   const taxAmount = order.restaurant?.enableTax
-    ? Math.round((subtotal * Number(order.restaurant.taxRate)) / 100)
+    ? Math.round((discountedSubtotal * Number(order.restaurant.taxRate)) / 100)
     : 0;
   const paymentMethodLabel: Record<string, string> = {
     CASH: 'Bayar Tunai di Kasir',
@@ -174,6 +176,12 @@ function OrderStatusContent() {
                       <span>Subtotal</span>
                       <span>Rp {subtotal.toLocaleString('id-ID')}</span>
                     </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-xs text-tertiary font-semibold">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-xs text-secondary">
                       <span>Pajak PPN ({order.restaurant.taxRate}%)</span>
                       <span>Rp {taxAmount.toLocaleString('id-ID')}</span>
@@ -184,10 +192,18 @@ function OrderStatusContent() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between font-bold text-sm">
-                    <span className="text-slate-800">Total Pembayaran</span>
-                    <span className="text-primary">Rp {Number(order.totalAmount).toLocaleString('id-ID')}</span>
-                  </div>
+                  <>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-xs text-tertiary font-semibold">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-sm">
+                      <span className="text-slate-800">Total Pembayaran</span>
+                      <span className="text-primary">Rp {Number(order.totalAmount).toLocaleString('id-ID')}</span>
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-between text-xs text-secondary pt-1">
                   <span>Metode Bayar</span>
@@ -336,6 +352,12 @@ function OrderStatusContent() {
                       <span>Subtotal</span>
                       <span>Rp {subtotal.toLocaleString('id-ID')}</span>
                     </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-tertiary font-semibold mt-1">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center text-xs text-secondary mt-1">
                       <span>Pajak PPN ({order.restaurant.taxRate}%)</span>
                       <span>Rp {taxAmount.toLocaleString('id-ID')}</span>
@@ -349,12 +371,20 @@ function OrderStatusContent() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between items-center text-sm font-bold">
-                    <span className="text-secondary">Total</span>
-                    <span className="text-primary">
-                      Rp {Number(order.totalAmount).toLocaleString('id-ID')}
-                    </span>
-                  </div>
+                  <>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-tertiary font-semibold">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-sm font-bold">
+                      <span className="text-secondary">Total</span>
+                      <span className="text-primary">
+                        Rp {Number(order.totalAmount).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-between items-center text-xs text-secondary mt-1">
                   <span>Metode Bayar</span>
@@ -423,6 +453,12 @@ function OrderStatusContent() {
                       <span>Subtotal</span>
                       <span>Rp {subtotal.toLocaleString('id-ID')}</span>
                     </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-tertiary font-semibold mt-1">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center text-xs text-secondary mt-1">
                       <span>Pajak PPN ({order.restaurant.taxRate}%)</span>
                       <span>Rp {taxAmount.toLocaleString('id-ID')}</span>
@@ -434,10 +470,18 @@ function OrderStatusContent() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between items-center text-sm font-bold">
-                    <span className="text-secondary">Total</span>
-                    <span className="text-primary">Rp {Number(order.totalAmount).toLocaleString('id-ID')}</span>
-                  </div>
+                  <>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-tertiary font-semibold">
+                        <span>Diskon Voucher {order.voucherCode ? `(${order.voucherCode})` : ''}</span>
+                        <span>-Rp {discountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-sm font-bold">
+                      <span className="text-secondary">Total</span>
+                      <span className="text-primary">Rp {Number(order.totalAmount).toLocaleString('id-ID')}</span>
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-between items-center text-xs text-secondary mt-1">
                   <span>Metode Bayar</span>

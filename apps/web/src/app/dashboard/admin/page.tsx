@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { QRCodeCanvas } from 'qrcode.react';
 import { api } from '../../../lib/api';
 import { useAppStore } from '../../../lib/store';
 import { Role } from '@repo/types';
@@ -12,11 +13,13 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const { user, token, logout } = useAppStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'settings'>('menu');
+  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'vouchers' | 'settings'>('menu');
 
   // Input states
   const [newCatName, setNewCatName] = useState('');
   const [newTableNum, setNewTableNum] = useState('');
+  const [qrPreviewTable, setQrPreviewTable] = useState<{ id: string; number: string; qrCodeUrl: string } | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [newMenu, setNewMenu] = useState({
     categoryId: '',
     name: '',
@@ -25,12 +28,25 @@ export default function AdminDashboard() {
     imageUrl: '',
   });
 
+  const [newVoucher, setNewVoucher] = useState({
+    code: '',
+    description: '',
+    discountPercent: 0,
+    maxDiscountAmount: '',
+    minPurchaseAmount: '',
+    startsAt: '',
+    expiresAt: '',
+    maxRedemptions: '',
+    isActive: true,
+  });
+
   // Edit Mode states
   const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editCatName, setEditCatName] = useState('');
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
   const [editTableNum, setEditTableNum] = useState('');
+  const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
 
   // Search & Filter states
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
@@ -86,6 +102,13 @@ export default function AdminDashboard() {
   const { data: menus, isLoading: isMenusLoading } = useQuery({
     queryKey: ['admin-menus', restaurantId],
     queryFn: () => api.getMenus(restaurantId!),
+    enabled: !!restaurantId,
+  });
+
+  // Fetch Vouchers
+  const { data: vouchers, isLoading: isVouchersLoading } = useQuery({
+    queryKey: ['admin-vouchers', restaurantId],
+    queryFn: () => api.getVouchers(restaurantId!),
     enabled: !!restaurantId,
   });
 
@@ -198,7 +221,83 @@ export default function AdminDashboard() {
     onError: (err: any) => alert(err.message || 'Gagal menghapus meja'),
   });
 
-  if (!restaurantId || isCatsLoading || isTablesLoading || isMenusLoading || isRestLoading) {
+  const handleDownloadQr = () => {
+    const canvas = qrCanvasRef.current;
+    if (!canvas || !qrPreviewTable) return;
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `QR-Meja-${qrPreviewTable.number}.png`;
+    link.click();
+  };
+
+  const handleCopyQrLink = () => {
+    if (!qrPreviewTable) return;
+    navigator.clipboard.writeText(`${window.location.origin}${qrPreviewTable.qrCodeUrl}`);
+  };
+
+  const resetVoucherForm = () =>
+    setNewVoucher({
+      code: '',
+      description: '',
+      discountPercent: 0,
+      maxDiscountAmount: '',
+      minPurchaseAmount: '',
+      startsAt: '',
+      expiresAt: '',
+      maxRedemptions: '',
+      isActive: true,
+    });
+
+  const buildVoucherPayload = () => ({
+    code: newVoucher.code,
+    description: newVoucher.description || undefined,
+    discountPercent: Number(newVoucher.discountPercent),
+    maxDiscountAmount: newVoucher.maxDiscountAmount ? Number(newVoucher.maxDiscountAmount) : undefined,
+    minPurchaseAmount: newVoucher.minPurchaseAmount ? Number(newVoucher.minPurchaseAmount) : undefined,
+    startsAt: newVoucher.startsAt ? new Date(newVoucher.startsAt).toISOString() : undefined,
+    expiresAt: newVoucher.expiresAt ? new Date(newVoucher.expiresAt).toISOString() : undefined,
+    maxRedemptions: newVoucher.maxRedemptions ? Number(newVoucher.maxRedemptions) : undefined,
+    isActive: newVoucher.isActive,
+  });
+
+  const addVoucherMutation = useMutation({
+    mutationFn: (data: any) => api.createVoucher(restaurantId!, data),
+    onSuccess: () => {
+      resetVoucherForm();
+      queryClient.invalidateQueries({ queryKey: ['admin-vouchers', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal menambahkan voucher'),
+  });
+
+  const editVoucherMutation = useMutation({
+    mutationFn: ({ voucherId, data }: { voucherId: string; data: any }) =>
+      api.updateVoucher(restaurantId!, voucherId, data),
+    onSuccess: () => {
+      setEditingVoucherId(null);
+      resetVoucherForm();
+      queryClient.invalidateQueries({ queryKey: ['admin-vouchers', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal memperbarui voucher'),
+  });
+
+  const deleteVoucherMutation = useMutation({
+    mutationFn: (voucherId: string) => api.deleteVoucher(restaurantId!, voucherId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vouchers', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal menghapus voucher'),
+  });
+
+  const toggleVoucherActiveMutation = useMutation({
+    mutationFn: ({ voucherId, isActive }: { voucherId: string; isActive: boolean }) =>
+      api.updateVoucher(restaurantId!, voucherId, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vouchers', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal memperbarui status voucher'),
+  });
+
+  if (!restaurantId || isCatsLoading || isTablesLoading || isMenusLoading || isRestLoading || isVouchersLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
@@ -274,6 +373,16 @@ export default function AdminDashboard() {
             }`}
           >
             Meja / QR Code ({tables?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('vouchers')}
+            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
+              activeSubTab === 'vouchers'
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-transparent text-secondary hover:text-foreground'
+            }`}
+          >
+            Voucher ({vouchers?.length || 0})
           </button>
           <button
             onClick={() => setActiveSubTab('settings')}
@@ -790,6 +899,14 @@ export default function AdminDashboard() {
                               </td>
                               <td className="p-3 text-right flex justify-end gap-2">
                                 <button
+                                  onClick={() =>
+                                    setQrPreviewTable({ id: table.id, number: table.number, qrCodeUrl: table.qrCodeUrl })
+                                  }
+                                  className="bg-muted hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-sm border border-border font-semibold text-[10px]"
+                                >
+                                  Lihat QR
+                                </button>
+                                <button
                                   onClick={() => {
                                     setEditingTableId(table.id);
                                     setEditTableNum(table.number);
@@ -811,6 +928,303 @@ export default function AdminDashboard() {
                               </td>
                             </>
                           )}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: QR Code Preview */}
+        {qrPreviewTable && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setQrPreviewTable(null)}
+          >
+            <div
+              className="bg-surface border border-border rounded-md shadow-subtle w-full max-w-xs p-6 text-center space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="font-bold text-base text-slate-800 font-serif">QR Code Meja {qrPreviewTable.number}</h3>
+              <div className="flex justify-center">
+                <QRCodeCanvas
+                  ref={qrCanvasRef}
+                  value={`${window.location.origin}${qrPreviewTable.qrCodeUrl}`}
+                  size={220}
+                />
+              </div>
+              <p className="text-[10px] font-mono text-secondary break-all">
+                {`${window.location.origin}${qrPreviewTable.qrCodeUrl}`}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDownloadQr}
+                  className="flex-1 bg-primary hover:bg-primary-hover text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider"
+                >
+                  Unduh PNG
+                </button>
+                <button
+                  onClick={handleCopyQrLink}
+                  className="flex-1 bg-muted hover:bg-slate-200 text-slate-700 py-2 rounded-sm border border-border text-xs font-bold uppercase tracking-wider"
+                >
+                  Salin Link
+                </button>
+              </div>
+              <button
+                onClick={() => setQrPreviewTable(null)}
+                className="text-secondary text-xs hover:underline"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Content: Vouchers */}
+        {activeSubTab === 'vouchers' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Form Voucher */}
+            <div className="bg-surface border border-border p-6 rounded-md shadow-subtle h-fit">
+              <h3 className="font-bold text-base text-slate-800 font-serif mb-4">
+                {editingVoucherId ? 'Edit Voucher' : 'Voucher Baru'}
+              </h3>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newVoucher.code || !newVoucher.discountPercent) return;
+                  const data = buildVoucherPayload();
+                  if (editingVoucherId) {
+                    editVoucherMutation.mutate({ voucherId: editingVoucherId, data });
+                  } else {
+                    addVoucherMutation.mutate(data);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Kode Voucher</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: HEMAT10"
+                    value={newVoucher.code}
+                    onChange={(e) => setNewVoucher({ ...newVoucher, code: e.target.value.toUpperCase() })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none uppercase"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Deskripsi</label>
+                  <input
+                    type="text"
+                    placeholder="Keterangan singkat (opsional)"
+                    value={newVoucher.description}
+                    onChange={(e) => setNewVoucher({ ...newVoucher, description: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Diskon (%)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      placeholder="10"
+                      value={newVoucher.discountPercent || ''}
+                      onChange={(e) => setNewVoucher({ ...newVoucher, discountPercent: Number(e.target.value) })}
+                      className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Maks. Potongan (Rp)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Tanpa batas"
+                      value={newVoucher.maxDiscountAmount}
+                      onChange={(e) => setNewVoucher({ ...newVoucher, maxDiscountAmount: e.target.value })}
+                      className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Minimal Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={newVoucher.minPurchaseAmount}
+                    onChange={(e) => setNewVoucher({ ...newVoucher, minPurchaseAmount: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Mulai Berlaku</label>
+                    <input
+                      type="date"
+                      value={newVoucher.startsAt}
+                      onChange={(e) => setNewVoucher({ ...newVoucher, startsAt: e.target.value })}
+                      className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Kedaluwarsa</label>
+                    <input
+                      type="date"
+                      value={newVoucher.expiresAt}
+                      onChange={(e) => setNewVoucher({ ...newVoucher, expiresAt: e.target.value })}
+                      className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Kuota Pemakaian</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Tanpa batas"
+                    value={newVoucher.maxRedemptions}
+                    onChange={(e) => setNewVoucher({ ...newVoucher, maxRedemptions: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-between p-3 border border-border rounded-sm">
+                  <span className="text-xs font-bold text-slate-800">Aktifkan Voucher</span>
+                  <input
+                    type="checkbox"
+                    checked={newVoucher.isActive}
+                    onChange={(e) => setNewVoucher({ ...newVoucher, isActive: e.target.checked })}
+                    className="w-4 h-4 text-primary border-border rounded-sm focus:ring-0 cursor-pointer accent-primary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={addVoucherMutation.isPending || editVoucherMutation.isPending}
+                  className="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  {editingVoucherId
+                    ? (editVoucherMutation.isPending ? 'Menyimpan...' : 'Simpan Perubahan')
+                    : (addVoucherMutation.isPending ? 'Menyimpan...' : 'Simpan Voucher')}
+                </button>
+                {editingVoucherId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingVoucherId(null);
+                      resetVoucherForm();
+                    }}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors mt-2"
+                  >
+                    Batal Edit
+                  </button>
+                )}
+              </form>
+            </div>
+
+            {/* List Voucher */}
+            <div className="lg:col-span-2 space-y-4">
+              <h3 className="font-bold text-base text-slate-800 font-serif">Daftar Voucher</h3>
+              <div className="bg-surface border border-border rounded-md shadow-subtle overflow-hidden">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-muted border-b border-border font-bold text-secondary text-[10px] uppercase tracking-wider">
+                      <th className="p-3 pl-4">Kode</th>
+                      <th className="p-3">Diskon</th>
+                      <th className="p-3">Min. Beli</th>
+                      <th className="p-3">Berlaku</th>
+                      <th className="p-3 text-center">Kuota</th>
+                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 text-right pr-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vouchers?.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-10 text-center text-secondary">
+                          Belum ada voucher. Tambahkan voucher baru terlebih dahulu.
+                        </td>
+                      </tr>
+                    ) : (
+                      vouchers?.map((v: any) => (
+                        <tr key={v.id} className="border-b border-border hover:bg-slate-50/50 transition-colors">
+                          <td className="p-3 pl-4 font-bold text-slate-800 font-mono">{v.code}</td>
+                          <td className="p-3 text-secondary">
+                            {v.discountPercent}%
+                            {v.maxDiscountAmount != null && (
+                              <span className="block text-[10px]">
+                                maks. Rp {Number(v.maxDiscountAmount).toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-secondary">
+                            {v.minPurchaseAmount ? `Rp ${Number(v.minPurchaseAmount).toLocaleString('id-ID')}` : '-'}
+                          </td>
+                          <td className="p-3 text-secondary text-[10px]">
+                            {v.startsAt ? new Date(v.startsAt).toLocaleDateString('id-ID') : 'Kapan saja'}
+                            {' – '}
+                            {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('id-ID') : 'Selamanya'}
+                          </td>
+                          <td className="p-3 text-center text-secondary">
+                            {v.usedCount}/{v.maxRedemptions ?? '∞'}
+                          </td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wide border ${
+                                v.isActive
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-red-50 text-red-600 border-red-200'
+                              }`}
+                            >
+                              {v.isActive ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </td>
+                          <td className="p-3 pr-4 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingVoucherId(v.id);
+                                  setNewVoucher({
+                                    code: v.code,
+                                    description: v.description || '',
+                                    discountPercent: v.discountPercent,
+                                    maxDiscountAmount: v.maxDiscountAmount != null ? String(v.maxDiscountAmount) : '',
+                                    minPurchaseAmount: v.minPurchaseAmount ? String(v.minPurchaseAmount) : '',
+                                    startsAt: v.startsAt ? v.startsAt.slice(0, 10) : '',
+                                    expiresAt: v.expiresAt ? v.expiresAt.slice(0, 10) : '',
+                                    maxRedemptions: v.maxRedemptions != null ? String(v.maxRedemptions) : '',
+                                    isActive: v.isActive,
+                                  });
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="bg-primary hover:bg-primary-hover text-white px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() =>
+                                  toggleVoucherActiveMutation.mutate({ voucherId: v.id, isActive: !v.isActive })
+                                }
+                                className="border border-border bg-surface hover:bg-muted text-slate-700 px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all"
+                              >
+                                {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Hapus voucher ini?')) {
+                                    deleteVoucherMutation.mutate(v.id);
+                                  }
+                                }}
+                                className="border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all"
+                              >
+                                Hapus
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}

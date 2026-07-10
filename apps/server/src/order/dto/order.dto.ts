@@ -29,6 +29,10 @@ export class CreateOrderDto {
   @IsEnum(PaymentMethod)
   @IsNotEmpty()
   paymentMethod!: PaymentMethod;
+
+  @IsString()
+  @IsOptional()
+  voucherCode?: string;
 }
 
 export class UpdateOrderStatusDto {

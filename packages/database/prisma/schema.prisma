@@ -25,6 +25,7 @@ model Restaurant {
   categories         Category[]
   menus              Menu[]
   orders             Order[]
+  vouchers           Voucher[]
 }
 
 model User {
@@ -82,12 +83,14 @@ model Order {
   restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   tableId      String
   table        Table       @relation(fields: [tableId], references: [id])
-  status       String      @default("DRAFT")
-  totalAmount  Float
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  orderItems   OrderItem[]
-  payments     Payment[]
+  status         String      @default("DRAFT")
+  totalAmount    Float
+  voucherCode    String?
+  discountAmount Float       @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  orderItems     OrderItem[]
+  payments       Payment[]
 }
 
 model OrderItem {
@@ -112,4 +115,24 @@ model Payment {
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model Voucher {
+  id                String     @id @default(uuid())
+  restaurantId      String
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code              String
+  description       String?
+  discountPercent   Float
+  maxDiscountAmount Float?
+  minPurchaseAmount Float      @default(0)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  maxRedemptions    Int?
+  usedCount         Int        @default(0)
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([restaurantId, code])
 }
