@@ -8,6 +8,14 @@
 
 ## 🆕 Update Log
 
+**2026-07-11** — **Search menu di halaman customer** (item 🟢 Nice-to-have): input pencarian baru di `/order` (ikon kaca pembesar + tombol clear), digabung (AND) dengan filter kategori yang sudah ada, match nama/deskripsi menu case-insensitive. Murni client-side, tidak ada perubahan backend (data menu memang sudah di-load penuh). Pesan "tidak ada menu" dibedakan antara kategori kosong vs pencarian tidak ketemu.
+
+**2026-07-11** — **Fix: catatan per-item customer tidak tersimpan**: input catatan di modal checkout (`apps/web/src/app/order/page.tsx`) sebelumnya uncontrolled (`defaultValue` + commit di `onBlur`) — kalau customer ketik catatan lalu langsung tap tombol "Buat Pesanan & Bayar" tanpa nge-tap area lain dulu, event blur bisa kalah timing dengan klik tombol (terutama di sejumlah browser/keyboard mobile), catatan hilang sebelum sempat tersimpan ke cart. Diubah jadi controlled input (`value` + `onChange`) yang commit ke store Zustand di setiap ketikan — race condition hilang total. Backend & rendering di dashboard kasir/dapur sudah benar sejak awal (diverifikasi via API langsung sebelum menyimpulkan ini bug frontend, bukan backend).
+
+**2026-07-11** — **Tunda status PENDING_PAYMENT sampai customer konfirmasi**: sebelumnya order langsung dibuat di DB (status `PENDING_PAYMENT`, langsung terlihat kasir) begitu customer klik "Buat Pesanan & Bayar" di modal checkout, dan cart langsung dikosongkan — jadi kalau customer batal di halaman konfirmasi berikutnya, mereka harus pilih ulang semua menu dari nol. Sekarang order **baru dibuat di DB saat customer klik "Ya, Pesanan Sudah Benar"** di halaman `/order/status` (mode draft, sourced dari cart + draft lokal, bukan dari order yang sudah ada). Kalau batal dari situ, tidak ada panggilan API sama sekali (belum ada apa pun untuk dibatalkan) dan cart tetap utuh saat kembali ke menu. Detail lengkap di bagian "Status Pesanan Customer" di bawah. Perubahan murni di frontend (`apps/web/src/lib/store.ts`, `apps/web/src/app/order/page.tsx`, `apps/web/src/app/order/status/page.tsx`) — tidak ada perubahan backend/schema. Diverifikasi: typecheck bersih, `api.createOrder`/`clearCart` dikonfirmasi hanya dipanggil dari satu tempat (tombol konfirmasi), dan alur `createOrder`/`cancelOrder` backend diuji ulang via API tetap berfungsi sama seperti sebelumnya.
+
+**2026-07-11** — **Pengaturan Profil Restoran** (item 🔴 KRITIS #1) selesai dibangun: admin sekarang bisa ubah nama, alamat, dan telepon restoran langsung dari tab Pengaturan di dashboard admin (sebelumnya hanya bisa lewat seed.ts). Endpoint baru `PATCH /restaurants/:id` (role OWNER/MANAGER), mengikuti pola persis `updatePaymentSettings` yang sudah ada. Diverifikasi via API: update tersimpan & persist, role kasir ditolak 403, request tanpa token ditolak 401.
+
 **2026-07-10** — Fokus prioritas: workflow single-tenant harus solid dulu sebelum fitur baru/multi-tenant (lihat memori project). Enam hal dibangun:
 - **Voucher/diskon persentase** — tab admin baru, validasi penuh backend (aktif/tanggal/minimal belanja/kuota), diterapkan di checkout customer, redemption atomik race-safe. (Exception yang diminta eksplisit user, di luar prioritas polish workflow.)
 - **QR Code generator nyata** — tab Meja admin, gambar QR (qrcode.react) client-side, unduh PNG, salin link. (Exception juga.)
@@ -112,17 +120,19 @@ g:/Project/post/
   - Toggle Pajak PPN + input tarif PPN (1%-10%)
 
 ### Customer Order (/order?tableId=[ID])
-- Tampil daftar menu, filter kategori
+- Tampil daftar menu, filter kategori + search teks (nama/deskripsi, client-side, digabung AND dengan filter kategori)
 - Toggle tampilan List / Grid 2 kolom
 - Keranjang belanja persisten (Zustand + localStorage)
-- Checkout modal: item + catatan per-item + pilih metode bayar + input Kode Voucher (validasi instan via endpoint publik)
+- Checkout modal: item + catatan per-item (controlled input, commit tiap ketikan — bukan onBlur) + pilih metode bayar + input Kode Voucher (validasi instan via endpoint publik)
 - Rincian harga: Subtotal, Diskon Voucher (jika ada kode diterapkan), Pajak PPN (dihitung dari subtotal setelah diskon), Total
+- Tombol "Buat Pesanan & Bayar" **tidak langsung membuat order di DB** — hanya menyimpan draft (`pendingOrderDraft` di Zustand store: metode bayar + kode voucher + diskon) dan pindah ke `/order/status` tanpa `orderId`. Cart TIDAK dikosongkan di sini.
 
 ### Status Pesanan Customer (/order/status)
-- Section Konfirmasi (muncul di atas saat PENDING_PAYMENT):
-  - Ringkasan item + diskon voucher (jika ada) + PPN + total + metode bayar
-  - Tombol "Ya, Pesanan Sudah Benar" → tracker aktif
-  - Tombol "Batalkan & Pesan Ulang" → memanggil API cancel (order jadi CANCELLED di DB), lalu redirect ke menu meja
+Dua mode, dibedakan dari ada/tidaknya `orderId` di query string:
+- **Mode draft** (`!orderId`, sebelum order dibuat): render ringkasan dari cart + `pendingOrderDraft` (bukan dari order di DB, karena belum ada).
+  - Tombol "Ya, Pesanan Sudah Benar" → **baru di sinilah** `POST /restaurants/:id/orders` benar-benar dipanggil (order jadi `PENDING_PAYMENT` di DB, baru sekarang muncul/notifikasi di dasbor kasir) → cart & draft dikosongkan → pindah ke mode order (`orderId` di-set via `router.replace`).
+  - Tombol "Batalkan & Pesan Ulang" → **tidak ada panggilan API** (order belum pernah dibuat) → cart dikembalikan utuh ke `/order?tableId=...` (item yang sudah dipilih tidak hilang).
+- **Mode order** (`orderId` ada — order sudah dibuat lewat konfirmasi draft di atas): langsung tampil tracker + ringkasan pesanan (tanpa gating konfirmasi lagi, karena begitu order ada berarti sudah dikonfirmasi). Tombol "Batalkan Pesanan" tetap tersedia selama status masih `PENDING_PAYMENT` (memanggil API cancel yang sama seperti sebelumnya).
 - Tracker Status 4 langkah (Menunggu Bayar → Diterima → Dimasak → Siap)
 - Instruksi bayar: Info kasir (Cash) atau Simulasi Bayar (Digital)
 - Real-time via WebSocket
@@ -155,39 +165,36 @@ g:/Project/post/
 
 > Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, **Notifikasi Audio/Visual di Kasir & Dapur**, **Validasi Ukuran Upload Foto Menu**, dan **Print Struk/Receipt** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
 
+> Item **Pengaturan Profil Restoran** dan **Search Menu di Halaman Customer** sudah selesai dibangun (lihat 🆕 Update Log 2026-07-11) dan dihapus dari daftar ini.
+
 ### 🔴 KRITIS — Harus Dibangun
 
-1. **Pengaturan Profil Restoran**
-   - Admin tidak bisa ubah nama restoran, alamat, telepon dari dashboard
-   - Solusi: Form update profil di tab Settings + endpoint PATCH /restaurants/:id
-
-2. **Laporan & Rekap Transaksi**
+1. **Laporan & Rekap Transaksi**
    - Tidak ada laporan penjualan (per hari, per menu, total pendapatan)
    - Solusi: Tab "Laporan" di admin dengan chart dan tabel rekap
 
-3. **Manajemen User / Staff**
+2. **Manajemen User / Staff**
    - Admin tidak bisa tambah/edit/hapus akun kasir atau dapur
    - User hanya bisa dibuat via seed.ts
    - Solusi: Tab "Staff" di admin untuk CRUD user + endpoint POST /restaurants/:id/users
 
-4. **Multi-tenant / Multi-restoran**
+3. **Multi-tenant / Multi-restoran**
    - Sistem hanya handle 1 restoran (seed hanya buat 1 data)
    - Solusi: Flow registrasi restoran baru, routing per restaurantId
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-5. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
+4. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
    - Semua data diload sekaligus (pesanan, menu). Menu cuma 7 item dan sudah pakai search+filter client-side (butuh data lengkap, jangan paginate GET /menus tanpa rework search jadi server-side dulu). Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu — itu satu-satunya target yang masuk akal kalau dikerjakan nanti.
    - Solusi (kalau/waktu dikerjakan): offset pagination + tombol "Muat Lebih Banyak" khusus di GET /orders untuk tab Riwayat Selesai kasir, bukan rewrite semua endpoint sekaligus
 
 ### 🟢 NICE TO HAVE
 
-6. Dark Mode — CSS variables untuk dark mode + toggle
-7. Riwayat Pesanan Customer — simpan orderId di localStorage
-8. Estimasi Waktu Masak — field menit di Menu
-9. Search Menu di Halaman Customer — saat ini hanya filter kategori
-10. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-11. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+5. Dark Mode — CSS variables untuk dark mode + toggle
+6. Riwayat Pesanan Customer — simpan orderId di localStorage
+7. Estimasi Waktu Masak — field menit di Menu
+8. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+9. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
@@ -256,6 +263,7 @@ Payment
 - POST /restaurants/:id/vouchers/validate  (cek kode voucher, tanpa efek samping)
 
 ### Protected (butuh JWT Bearer token):
+- PATCH /restaurants/:id  (Owner/Manager — update nama/alamat/telepon)
 - PATCH /restaurants/:id/payment-settings  (Owner/Manager)
 - PATCH /restaurants/:id/orders/:orderId/status  (Kasir/Dapur)
 - POST /restaurants/:id/menus/upload  (Owner/Manager)
@@ -276,7 +284,7 @@ Payment
 
 4. totalAmount INKLUSIF pajak: untuk dapatkan subtotal, hitung sum(orderItems.price * quantity).
 
-5. Pembatalan pesanan customer sudah pakai API sungguhan (POST .../orders/:orderId/cancel), tapi hanya berlaku selama order masih PENDING_PAYMENT — kalau kasir sudah proses duluan (race condition), request cancel akan ditolak 400 dan customer harus refresh untuk lihat status terbaru. Tidak ada tombol cancel manual di dashboard kasir.
+5. Pembatalan pesanan: ada dua jalur sekarang. Sebelum order dibuat (mode draft di `/order/status`, belum ada `orderId`), "Batalkan" murni lokal — tidak ada panggilan API karena belum ada apa pun di DB. Setelah order dibuat (mode order, `orderId` ada), "Batalkan Pesanan" memanggil API sungguhan (POST .../orders/:orderId/cancel), hanya berlaku selama order masih PENDING_PAYMENT — kalau kasir sudah proses duluan (race condition), request cancel akan ditolak 400 dan customer harus refresh untuk lihat status terbaru. Tidak ada tombol cancel manual di dashboard kasir.
 
 6. File upload gambar: tersimpan di apps/server/uploads/, diakses via /uploads/filename. Tidak ada cleanup file lama saat menu dihapus. Maksimal 2MB, harus tipe gambar (JPG/PNG/WEBP/GIF) — divalidasi di `menu.controller.ts` (Multer `limits`+`fileFilter`) dan `upload-size.filter.ts` (pesan 413 Bahasa Indonesia).
 
