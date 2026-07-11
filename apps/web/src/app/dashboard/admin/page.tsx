@@ -10,17 +10,27 @@ import { Role } from '@repo/types';
 
 const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024; // 2MB — harus sinkron dengan limit di server
 
+function toDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, token, logout } = useAppStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'vouchers' | 'settings'>('menu');
+  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'vouchers' | 'laporan' | 'settings'>('menu');
 
   // Input states
   const [newCatName, setNewCatName] = useState('');
   const [newTableNum, setNewTableNum] = useState('');
   const [restaurantProfileForm, setRestaurantProfileForm] = useState({ name: '', address: '', phone: '' });
+  const [reportTo, setReportTo] = useState(() => toDateInputValue(new Date()));
+  const [reportFrom, setReportFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return toDateInputValue(d);
+  });
   const [qrPreviewTable, setQrPreviewTable] = useState<{ id: string; number: string; qrCodeUrl: string } | null>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [newMenu, setNewMenu] = useState({
@@ -129,6 +139,14 @@ export default function AdminDashboard() {
     queryKey: ['admin-vouchers', restaurantId],
     queryFn: () => api.getVouchers(restaurantId!),
     enabled: !!restaurantId,
+  });
+
+  // Fetch Sales Report — sengaja TIDAK ikut gate loading global di bawah,
+  // supaya tab lain tidak ikut nunggu laporan selesai fetch.
+  const { data: report, isLoading: isReportLoading } = useQuery({
+    queryKey: ['admin-report-summary', restaurantId, reportFrom, reportTo],
+    queryFn: () => api.getSalesSummary(restaurantId!, reportFrom, reportTo),
+    enabled: !!restaurantId && activeSubTab === 'laporan',
   });
 
   // Mutations
@@ -411,6 +429,16 @@ export default function AdminDashboard() {
             }`}
           >
             Voucher ({vouchers?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('laporan')}
+            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
+              activeSubTab === 'laporan'
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-transparent text-secondary hover:text-foreground'
+            }`}
+          >
+            Laporan
           </button>
           <button
             onClick={() => setActiveSubTab('settings')}
@@ -1447,6 +1475,225 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Tab Content: Laporan */}
+        {activeSubTab === 'laporan' && (() => {
+          const handleQuickRange = (days: number) => {
+            const to = new Date();
+            const from = new Date();
+            from.setDate(from.getDate() - (days - 1));
+            setReportTo(toDateInputValue(to));
+            setReportFrom(toDateInputValue(from));
+          };
+          const isQuickRangeActive = (days: number) => {
+            const expectedFrom = new Date();
+            expectedFrom.setDate(expectedFrom.getDate() - (days - 1));
+            return reportFrom === toDateInputValue(expectedFrom) && reportTo === toDateInputValue(new Date());
+          };
+          const PAYMENT_METHOD_LABEL: Record<string, string> = {
+            CASH: 'Tunai',
+            E_WALLET: 'E-Wallet',
+            QRIS: 'QRIS',
+            BANK_TRANSFER: 'Transfer Bank',
+            UNKNOWN: 'Lainnya',
+          };
+          const maxDailyRevenue = Math.max(1, ...(report?.dailyRevenue?.map((d: any) => d.revenue) || [0]));
+
+          return (
+            <div className="space-y-6">
+              {/* Kontrol Rentang Tanggal */}
+              <div className="bg-surface border border-border rounded-md shadow-subtle p-4 flex flex-wrap items-end gap-3">
+                <div className="flex gap-2">
+                  {[
+                    { label: 'Hari Ini', days: 1 },
+                    { label: '7 Hari', days: 7 },
+                    { label: '30 Hari', days: 30 },
+                  ].map((opt) => (
+                    <button
+                      key={opt.days}
+                      type="button"
+                      onClick={() => handleQuickRange(opt.days)}
+                      className={`px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wider border transition-colors ${
+                        isQuickRangeActive(opt.days)
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-surface text-secondary border-border hover:bg-muted'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-end gap-2">
+                  <label className="block">
+                    <span className="text-[11px] font-bold text-slate-700 mb-1 block">Dari</span>
+                    <input
+                      type="date"
+                      value={reportFrom}
+                      max={reportTo}
+                      onChange={(e) => setReportFrom(e.target.value)}
+                      className="border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] font-bold text-slate-700 mb-1 block">Sampai</span>
+                    <input
+                      type="date"
+                      value={reportTo}
+                      min={reportFrom}
+                      max={toDateInputValue(new Date())}
+                      onChange={(e) => setReportTo(e.target.value)}
+                      className="border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                  </label>
+                </div>
+                {isReportLoading && (
+                  <span className="text-xs text-secondary">Memuat laporan...</span>
+                )}
+              </div>
+
+              {!report ? null : (
+                <>
+                  {/* Kartu Ringkasan */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-surface border border-border rounded-md shadow-subtle p-4">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">
+                        Total Pendapatan
+                      </div>
+                      <div className="text-xl font-bold font-serif text-slate-800">
+                        Rp {report.totalRevenue.toLocaleString('id-ID')}
+                      </div>
+                    </div>
+                    <div className="bg-surface border border-border rounded-md shadow-subtle p-4">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">
+                        Total Pesanan
+                      </div>
+                      <div className="text-xl font-bold font-serif text-slate-800">
+                        {report.totalOrders}
+                      </div>
+                    </div>
+                    <div className="bg-surface border border-border rounded-md shadow-subtle p-4">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">
+                        Rata-rata / Pesanan
+                      </div>
+                      <div className="text-xl font-bold font-serif text-slate-800">
+                        Rp {Math.round(report.averageOrderValue).toLocaleString('id-ID')}
+                      </div>
+                    </div>
+                    <div className="bg-surface border border-border rounded-md shadow-subtle p-4">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">
+                        Periode
+                      </div>
+                      <div className="text-sm font-bold font-serif text-slate-800">
+                        {report.range.from} &ndash; {report.range.to}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chart Pendapatan Harian (custom CSS, tanpa library) */}
+                  <div className="bg-surface border border-border rounded-md shadow-subtle p-6">
+                    <h3 className="font-bold text-base text-slate-800 font-serif mb-4">Pendapatan Harian</h3>
+                    {report.dailyRevenue.length === 0 ? (
+                      <p className="text-sm text-secondary text-center py-10">Tidak ada data pada periode ini.</p>
+                    ) : (
+                      <div className="flex items-end gap-1.5 h-48 border-b border-border">
+                        {report.dailyRevenue.map((day: any) => {
+                          const pct = maxDailyRevenue > 0 ? (day.revenue / maxDailyRevenue) * 100 : 0;
+                          return (
+                            <div
+                              key={day.date}
+                              className="flex-1 flex flex-col items-center justify-end h-full"
+                            >
+                              <div
+                                title={`${day.date}: Rp ${day.revenue.toLocaleString('id-ID')} (${day.orderCount} pesanan)`}
+                                style={{ height: `${pct}%` }}
+                                className="w-full bg-primary/80 hover:bg-primary transition-all duration-150 min-h-[2px] rounded-t-sm"
+                              />
+                              <span className="text-[9px] text-secondary mt-1">{day.date.slice(8, 10)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Tabel Menu Terlaris */}
+                    <div className="bg-surface border border-border rounded-md shadow-subtle overflow-hidden">
+                      <div className="p-4 bg-muted border-b border-border">
+                        <h4 className="font-bold text-sm text-slate-800 font-serif">Menu Terlaris</h4>
+                      </div>
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-muted border-b border-border font-bold text-secondary text-[10px] uppercase tracking-wider">
+                            <th className="p-3 pl-4">Menu</th>
+                            <th className="p-3 text-right">Qty Terjual</th>
+                            <th className="p-3 text-right pr-4">Pendapatan</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.topMenus.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="p-6 text-center text-secondary">
+                                Belum ada penjualan pada periode ini.
+                              </td>
+                            </tr>
+                          ) : (
+                            report.topMenus.map((m: any) => (
+                              <tr key={m.menuId} className="border-b border-border hover:bg-slate-50/50 transition-colors">
+                                <td className="p-3 pl-4 font-semibold text-slate-800">{m.name}</td>
+                                <td className="p-3 text-right">{m.quantitySold}</td>
+                                <td className="p-3 text-right pr-4 font-bold text-slate-800">
+                                  Rp {m.revenue.toLocaleString('id-ID')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Rekap Metode Pembayaran */}
+                    <div className="bg-surface border border-border rounded-md shadow-subtle overflow-hidden">
+                      <div className="p-4 bg-muted border-b border-border">
+                        <h4 className="font-bold text-sm text-slate-800 font-serif">Rekap Metode Pembayaran</h4>
+                      </div>
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-muted border-b border-border font-bold text-secondary text-[10px] uppercase tracking-wider">
+                            <th className="p-3 pl-4">Metode</th>
+                            <th className="p-3 text-right">Jumlah Pesanan</th>
+                            <th className="p-3 text-right pr-4">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.paymentMethodBreakdown.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="p-6 text-center text-secondary">
+                                Belum ada transaksi pada periode ini.
+                              </td>
+                            </tr>
+                          ) : (
+                            report.paymentMethodBreakdown.map((p: any) => (
+                              <tr key={p.method} className="border-b border-border hover:bg-slate-50/50 transition-colors">
+                                <td className="p-3 pl-4 font-semibold text-slate-800">
+                                  {PAYMENT_METHOD_LABEL[p.method] || p.method}
+                                </td>
+                                <td className="p-3 text-right">{p.orderCount}</td>
+                                <td className="p-3 text-right pr-4 font-bold text-slate-800">
+                                  Rp {p.amount.toLocaleString('id-ID')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
       </main>
     </div>
   );

@@ -166,4 +166,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ code, subtotal }),
     }),
+
+  // Reports
+  getSalesSummary: (restaurantId: string, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return fetchApi(`/restaurants/${restaurantId}/reports/summary${query}`);
+  },
 };
