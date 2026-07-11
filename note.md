@@ -8,6 +8,11 @@
 
 ## 🆕 Update Log
 
+**2026-07-11** — **Laporan & Rekap Transaksi** (item 🔴 KRITIS #1, sekarang selesai) — tab "Laporan" baru di admin dashboard: kartu ringkasan (total pendapatan, total pesanan, rata-rata/pesanan), chart pendapatan harian (custom CSS bar chart, **tanpa library chart baru** — keputusan eksplisit user untuk konsisten dengan project yang full vanilla CSS), tabel menu terlaris (top 10), dan rekap per metode pembayaran. Kontrol rentang tanggal: quick-select (Hari Ini/7 Hari/30 Hari) + date input manual, default 7 hari terakhir.
+- Backend: modul baru `apps/server/src/report/` (`report.module.ts`/`report.controller.ts`/`report.service.ts`), satu endpoint `GET /restaurants/:id/reports/summary?from=&to=` (`@Roles(OWNER, MANAGER)`), agregasi dilakukan in-memory (bukan raw SQL `groupBy`) — konsisten dengan alasan penundaan pagination project ini ("data masih kecil").
+- **Temuan penting yang mempengaruhi desain**: pembayaran cash dikonfirmasi kasir lewat `updateOrderStatus` (generic status PATCH), yang **hanya update `Order.status`, tidak pernah menyentuh `Payment.status`/`paidAt`** — jadi untuk transaksi cash, `Payment.status` selamanya `PENDING` walau order-nya sudah lunas. Laporan **filter berdasarkan `Order.status`** (PAID/PROCESSING/READY/COMPLETED), **bukan** `Payment.status` — kalau nanti ada fitur lain yang butuh "status pembayaran sukses", jangan asumsikan `Payment.status === SUCCESS` reliable untuk cash. Tanggal transaksi pakai `Order.createdAt` (bukan `Payment.paidAt` yang null untuk cash).
+- Diverifikasi via API: total pendapatan bertambah tepat sesuai order baru untuk **kedua** jalur pembayaran (cash via `updateOrderStatus` dan digital via `simulatePayment`), role kasir/dapur ditolak 403, range custom/kosong/1-hari semua diuji tanpa error.
+
 **2026-07-11** — **Search menu di halaman customer** (item 🟢 Nice-to-have): input pencarian baru di `/order` (ikon kaca pembesar + tombol clear), digabung (AND) dengan filter kategori yang sudah ada, match nama/deskripsi menu case-insensitive. Murni client-side, tidak ada perubahan backend (data menu memang sudah di-load penuh). Pesan "tidak ada menu" dibedakan antara kategori kosong vs pencarian tidak ketemu.
 
 **2026-07-11** — **Fix: catatan per-item customer tidak tersimpan**: input catatan di modal checkout (`apps/web/src/app/order/page.tsx`) sebelumnya uncontrolled (`defaultValue` + commit di `onBlur`) — kalau customer ketik catatan lalu langsung tap tombol "Buat Pesanan & Bayar" tanpa nge-tap area lain dulu, event blur bisa kalah timing dengan klik tombol (terutama di sejumlah browser/keyboard mobile), catatan hilang sebelum sempat tersimpan ke cart. Diubah jadi controlled input (`value` + `onChange`) yang commit ke store Zustand di setiap ketikan — race condition hilang total. Backend & rendering di dashboard kasir/dapur sudah benar sejak awal (diverifikasi via API langsung sebelum menyimpulkan ini bug frontend, bukan backend).
@@ -118,6 +123,8 @@ g:/Project/post/
 - Tab Pengaturan:
   - Toggle metode bayar: Tunai, E-Wallet, QRIS, Transfer Bank
   - Toggle Pajak PPN + input tarif PPN (1%-10%)
+  - Profil Restoran: ubah nama, alamat, telepon
+- Tab Laporan: kartu ringkasan (total pendapatan, total pesanan, rata-rata/pesanan), chart pendapatan harian (custom CSS), tabel menu terlaris, rekap per metode pembayaran. Kontrol rentang tanggal quick-select (Hari Ini/7 Hari/30 Hari) + date input manual.
 
 ### Customer Order (/order?tableId=[ID])
 - Tampil daftar menu, filter kategori + search teks (nama/deskripsi, client-side, digabung AND dengan filter kategori)
@@ -165,36 +172,32 @@ Dua mode, dibedakan dari ada/tidaknya `orderId` di query string:
 
 > Item **QR Code Generator Nyata**, **Pembatalan Pesanan oleh Customer**, **Notifikasi Audio/Visual di Kasir & Dapur**, **Validasi Ukuran Upload Foto Menu**, dan **Print Struk/Receipt** sudah selesai dibangun (lihat 🆕 Update Log di bawah) dan dihapus dari daftar ini. Item **Validasi Meja Sudah Ada Pesanan Aktif** juga dihapus — dikonfirmasi user 2026-07-10 bahwa satu meja memang boleh punya lebih dari satu pesanan aktif sekaligus (skenario grup pelanggan pesan sendiri-sendiri), jadi itu bukan bug.
 
-> Item **Pengaturan Profil Restoran** dan **Search Menu di Halaman Customer** sudah selesai dibangun (lihat 🆕 Update Log 2026-07-11) dan dihapus dari daftar ini.
+> Item **Pengaturan Profil Restoran**, **Search Menu di Halaman Customer**, dan **Laporan & Rekap Transaksi** sudah selesai dibangun (lihat 🆕 Update Log 2026-07-11) dan dihapus dari daftar ini.
 
 ### 🔴 KRITIS — Harus Dibangun
 
-1. **Laporan & Rekap Transaksi**
-   - Tidak ada laporan penjualan (per hari, per menu, total pendapatan)
-   - Solusi: Tab "Laporan" di admin dengan chart dan tabel rekap
-
-2. **Manajemen User / Staff**
+1. **Manajemen User / Staff**
    - Admin tidak bisa tambah/edit/hapus akun kasir atau dapur
    - User hanya bisa dibuat via seed.ts
    - Solusi: Tab "Staff" di admin untuk CRUD user + endpoint POST /restaurants/:id/users
 
-3. **Multi-tenant / Multi-restoran**
+2. **Multi-tenant / Multi-restoran**
    - Sistem hanya handle 1 restoran (seed hanya buat 1 data)
    - Solusi: Flow registrasi restoran baru, routing per restaurantId
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-4. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
+3. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
    - Semua data diload sekaligus (pesanan, menu). Menu cuma 7 item dan sudah pakai search+filter client-side (butuh data lengkap, jangan paginate GET /menus tanpa rework search jadi server-side dulu). Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu — itu satu-satunya target yang masuk akal kalau dikerjakan nanti.
    - Solusi (kalau/waktu dikerjakan): offset pagination + tombol "Muat Lebih Banyak" khusus di GET /orders untuk tab Riwayat Selesai kasir, bukan rewrite semua endpoint sekaligus
 
 ### 🟢 NICE TO HAVE
 
-5. Dark Mode — CSS variables untuk dark mode + toggle
-6. Riwayat Pesanan Customer — simpan orderId di localStorage
-7. Estimasi Waktu Masak — field menit di Menu
-8. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-9. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+4. Dark Mode — CSS variables untuk dark mode + toggle
+5. Riwayat Pesanan Customer — simpan orderId di localStorage
+6. Estimasi Waktu Masak — field menit di Menu
+7. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+8. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
 
 ---
 
@@ -271,6 +274,7 @@ Payment
 - CRUD /restaurants/:id/categories/:categoryId
 - CRUD /restaurants/:id/tables/:tableId
 - CRUD /restaurants/:id/vouchers/:voucherId  (Owner/Manager)
+- GET /restaurants/:id/reports/summary?from=&to=  (Owner/Manager — laporan penjualan)
 
 ---
 
