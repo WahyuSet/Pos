@@ -1,8 +1,8 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +26,10 @@ export class AuthService {
       throw new UnauthorizedException('Username atau password salah');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Akun tidak aktif, hubungi admin');
+    }
+
     const payload = {
       sub: user.id,
       username: user.username,
@@ -44,37 +48,6 @@ export class AuthService {
         role: user.role,
         restaurantId: user.restaurantId,
       },
-    };
-  }
-
-  async register(registerDto: RegisterDto) {
-    const { username, password, name, role, restaurantId } = registerDto;
-
-    const existingUser = await this.prisma.user.findUnique({
-      where: { username },
-    });
-
-    if (existingUser) {
-      throw new ConflictException('Username sudah digunakan');
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        username,
-        passwordHash,
-        name,
-        role: role as any,
-        restaurantId,
-      },
-    });
-
-    return {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
     };
   }
 }

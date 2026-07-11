@@ -35,12 +35,6 @@ export const api = {
       body: JSON.stringify(credentials),
     }),
   
-  register: (data: any) =>
-    fetchApi('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
   // Restaurant
   getRestaurant: (id: string) => fetchApi(`/restaurants/${id}`),
   updateRestaurant: (restaurantId: string, data: any) =>
@@ -165,6 +159,19 @@ export const api = {
     fetchApi(`/restaurants/${restaurantId}/vouchers/validate`, {
       method: 'POST',
       body: JSON.stringify({ code, subtotal }),
+    }),
+
+  // Users / Staff
+  getUsers: (restaurantId: string) => fetchApi(`/restaurants/${restaurantId}/users`),
+  createUser: (restaurantId: string, data: any) =>
+    fetchApi(`/restaurants/${restaurantId}/users`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateUser: (restaurantId: string, userId: string, data: any) =>
+    fetchApi(`/restaurants/${restaurantId}/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     }),
 
   // Reports

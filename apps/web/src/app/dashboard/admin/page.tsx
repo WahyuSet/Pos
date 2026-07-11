@@ -19,7 +19,7 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const { user, token, logout } = useAppStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'vouchers' | 'laporan' | 'settings'>('menu');
+  const [activeSubTab, setActiveSubTab] = useState<'menu' | 'categories' | 'tables' | 'vouchers' | 'staff' | 'laporan' | 'settings'>('menu');
 
   // Input states
   const [newCatName, setNewCatName] = useState('');
@@ -53,6 +53,13 @@ export default function AdminDashboard() {
     isActive: true,
   });
 
+  const [newStaff, setNewStaff] = useState({
+    username: '',
+    name: '',
+    password: '',
+    role: Role.CASHIER as Role,
+  });
+
   // Edit Mode states
   const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -60,6 +67,7 @@ export default function AdminDashboard() {
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
   const [editTableNum, setEditTableNum] = useState('');
   const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   // Search & Filter states
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
@@ -138,6 +146,13 @@ export default function AdminDashboard() {
   const { data: vouchers, isLoading: isVouchersLoading } = useQuery({
     queryKey: ['admin-vouchers', restaurantId],
     queryFn: () => api.getVouchers(restaurantId!),
+    enabled: !!restaurantId,
+  });
+
+  // Fetch Staff
+  const { data: users, isLoading: isUsersLoading } = useQuery({
+    queryKey: ['admin-users', restaurantId],
+    queryFn: () => api.getUsers(restaurantId!),
     enabled: !!restaurantId,
   });
 
@@ -343,7 +358,46 @@ export default function AdminDashboard() {
     onError: (err: any) => alert(err.message || 'Gagal memperbarui status voucher'),
   });
 
-  if (!restaurantId || isCatsLoading || isTablesLoading || isMenusLoading || isRestLoading || isVouchersLoading) {
+  const resetStaffForm = () =>
+    setNewStaff({ username: '', name: '', password: '', role: Role.CASHIER });
+
+  const buildStaffPayload = () => ({
+    username: newStaff.username,
+    name: newStaff.name,
+    role: newStaff.role,
+    ...(newStaff.password ? { password: newStaff.password } : {}),
+  });
+
+  const addUserMutation = useMutation({
+    mutationFn: (data: any) => api.createUser(restaurantId!, data),
+    onSuccess: () => {
+      resetStaffForm();
+      queryClient.invalidateQueries({ queryKey: ['admin-users', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal menambahkan staff'),
+  });
+
+  const editUserMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: any }) =>
+      api.updateUser(restaurantId!, userId, data),
+    onSuccess: () => {
+      setEditingUserId(null);
+      resetStaffForm();
+      queryClient.invalidateQueries({ queryKey: ['admin-users', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal memperbarui staff'),
+  });
+
+  const toggleUserActiveMutation = useMutation({
+    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+      api.updateUser(restaurantId!, userId, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal memperbarui status staff'),
+  });
+
+  if (!restaurantId || isCatsLoading || isTablesLoading || isMenusLoading || isRestLoading || isVouchersLoading || isUsersLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
@@ -429,6 +483,16 @@ export default function AdminDashboard() {
             }`}
           >
             Voucher ({vouchers?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('staff')}
+            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
+              activeSubTab === 'staff'
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-transparent text-secondary hover:text-foreground'
+            }`}
+          >
+            Staff ({users?.length || 0})
           </button>
           <button
             onClick={() => setActiveSubTab('laporan')}
@@ -1278,6 +1342,174 @@ export default function AdminDashboard() {
                                 className="border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all"
                               >
                                 Hapus
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Content: Staff */}
+        {activeSubTab === 'staff' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Form Staff */}
+            <div className="bg-surface border border-border p-6 rounded-md shadow-subtle h-fit">
+              <h3 className="font-bold text-base text-slate-800 font-serif mb-4">
+                {editingUserId ? 'Edit Staff' : 'Staff Baru'}
+              </h3>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newStaff.username || !newStaff.name || (!editingUserId && !newStaff.password)) return;
+                  const data = buildStaffPayload();
+                  if (editingUserId) {
+                    editUserMutation.mutate({ userId: editingUserId, data });
+                  } else {
+                    addUserMutation.mutate(data);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Username</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: kasir2"
+                    value={newStaff.username}
+                    onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nama Lengkap</label>
+                  <input
+                    type="text"
+                    placeholder="Nama staff"
+                    value={newStaff.name}
+                    onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Password</label>
+                  <input
+                    type="password"
+                    placeholder={editingUserId ? 'Kosongkan jika tidak diubah' : 'Minimal 6 karakter'}
+                    value={newStaff.password}
+                    onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                    required={!editingUserId}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Role</label>
+                  <select
+                    value={newStaff.role}
+                    onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value as Role })}
+                    className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none"
+                  >
+                    <option value={Role.MANAGER}>Manajer</option>
+                    <option value={Role.CASHIER}>Kasir</option>
+                    <option value={Role.KITCHEN}>Dapur</option>
+                    <option value={Role.WAITER}>Pelayan</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  disabled={addUserMutation.isPending || editUserMutation.isPending}
+                  className="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  {editingUserId
+                    ? (editUserMutation.isPending ? 'Menyimpan...' : 'Simpan Perubahan')
+                    : (addUserMutation.isPending ? 'Menyimpan...' : 'Simpan Staff')}
+                </button>
+                {editingUserId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingUserId(null);
+                      resetStaffForm();
+                    }}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-sm text-xs font-bold uppercase tracking-wider transition-colors mt-2"
+                  >
+                    Batal Edit
+                  </button>
+                )}
+              </form>
+            </div>
+
+            {/* List Staff */}
+            <div className="lg:col-span-2 space-y-4">
+              <h3 className="font-bold text-base text-slate-800 font-serif">Daftar Staff</h3>
+              <div className="bg-surface border border-border rounded-md shadow-subtle overflow-hidden">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-muted border-b border-border font-bold text-secondary text-[10px] uppercase tracking-wider">
+                      <th className="p-3 pl-4">Nama</th>
+                      <th className="p-3">Username</th>
+                      <th className="p-3">Role</th>
+                      <th className="p-3 text-center">Status</th>
+                      <th className="p-3 text-right pr-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users?.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-10 text-center text-secondary">
+                          Belum ada staff. Tambahkan staff baru terlebih dahulu.
+                        </td>
+                      </tr>
+                    ) : (
+                      users?.map((u: any) => (
+                        <tr key={u.id} className="border-b border-border hover:bg-slate-50/50 transition-colors">
+                          <td className="p-3 pl-4 font-bold text-slate-800">{u.name}</td>
+                          <td className="p-3 font-mono text-secondary">{u.username}</td>
+                          <td className="p-3 text-secondary">{u.role}</td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wide border ${
+                                u.isActive
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-red-50 text-red-600 border-red-200'
+                              }`}
+                            >
+                              {u.isActive ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </td>
+                          <td className="p-3 pr-4 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingUserId(u.id);
+                                  setNewStaff({
+                                    username: u.username,
+                                    name: u.name,
+                                    password: '',
+                                    role: u.role,
+                                  });
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="bg-primary hover:bg-primary-hover text-white px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                disabled={u.id === user?.id}
+                                title={u.id === user?.id ? 'Tidak bisa menonaktifkan akun sendiri' : undefined}
+                                onClick={() =>
+                                  toggleUserActiveMutation.mutate({ userId: u.id, isActive: !u.isActive })
+                                }
+                                className="border border-border bg-surface hover:bg-muted text-slate-700 px-2 py-1 rounded-sm text-[9px] font-bold uppercase tracking-wider shadow-subtle transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                               </button>
                             </div>
                           </td>
