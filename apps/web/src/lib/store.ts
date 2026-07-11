@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserSession } from '@repo/types';
+import { UserSession, PaymentMethod } from '@repo/types';
 
 interface CartItem {
   id: string; // menuId
@@ -8,6 +8,14 @@ interface CartItem {
   price: number;
   quantity: number;
   notes?: string;
+}
+
+interface PendingOrderDraft {
+  tableId: string;
+  restaurantId: string;
+  paymentMethod: PaymentMethod;
+  voucherCode?: string;
+  discountAmount: number;
 }
 
 interface AppState {
@@ -18,7 +26,12 @@ interface AppState {
   updateCartQuantity: (id: string, quantity: number) => void;
   updateCartNotes: (id: string, notes: string) => void;
   clearCart: () => void;
-  
+
+  // Pending order draft (checkout reviewed by customer, not yet created in DB)
+  pendingOrderDraft: PendingOrderDraft | null;
+  setPendingOrderDraft: (draft: PendingOrderDraft) => void;
+  clearPendingOrderDraft: () => void;
+
   // Auth
   user: UserSession | null;
   token: string | null;
@@ -64,6 +77,11 @@ export const useAppStore = create<AppState>()(
         })),
       clearCart: () => set({ cart: [] }),
 
+      // Pending order draft
+      pendingOrderDraft: null,
+      setPendingOrderDraft: (draft) => set({ pendingOrderDraft: draft }),
+      clearPendingOrderDraft: () => set({ pendingOrderDraft: null }),
+
       // Auth
       user: null,
       token: null,
@@ -84,6 +102,7 @@ export const useAppStore = create<AppState>()(
       name: 'pos-order-storage',
       partialize: (state) => ({
         cart: state.cart,
+        pendingOrderDraft: state.pendingOrderDraft,
         user: state.user,
         token: state.token,
       }),

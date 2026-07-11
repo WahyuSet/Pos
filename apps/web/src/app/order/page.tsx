@@ -13,8 +13,9 @@ function OrderContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { cart, addToCart, updateCartQuantity, clearCart } = useAppStore();
+  const { cart, addToCart, updateCartQuantity, updateCartNotes, setPendingOrderDraft } = useAppStore();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.E_WALLET);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -56,22 +57,6 @@ function OrderContent() {
     enabled: !!restaurantId,
   });
 
-  // Create Order Mutation
-  const createOrderMutation = useMutation({
-    mutationFn: (orderData: any) => api.createOrder(restaurantId!, orderData),
-    onSuccess: (data) => {
-      clearCart();
-      setIsCheckoutOpen(false);
-      setAppliedVoucher(null);
-      setVoucherInput('');
-      setVoucherError('');
-      router.push(`/order/status?orderId=${data.id}&restaurantId=${restaurantId}`);
-    },
-    onError: (err: any) => {
-      alert(err.message || 'Gagal membuat pesanan');
-    },
-  });
-
   // Validate Voucher Mutation
   const validateVoucherMutation = useMutation({
     mutationFn: () => {
@@ -95,20 +80,22 @@ function OrderContent() {
   };
 
   const submitOrder = () => {
-    if (!tableId || cart.length === 0) return;
+    if (!tableId || !restaurantId || cart.length === 0) return;
 
-    const orderData = {
+    setPendingOrderDraft({
       tableId,
+      restaurantId,
       paymentMethod,
-      items: cart.map((item) => ({
-        menuId: item.id,
-        quantity: item.quantity,
-        notes: item.notes || '',
-      })),
-      ...(appliedVoucher ? { voucherCode: appliedVoucher.code } : {}),
-    };
+      voucherCode: appliedVoucher?.code,
+      discountAmount: appliedVoucher?.discountAmount ?? 0,
+    });
 
-    createOrderMutation.mutate(orderData);
+    setIsCheckoutOpen(false);
+    setAppliedVoucher(null);
+    setVoucherInput('');
+    setVoucherError('');
+
+    router.push(`/order/status?restaurantId=${restaurantId}&tableId=${tableId}`);
   };
 
   if (!tableId) {
@@ -147,9 +134,15 @@ function OrderContent() {
   }
 
   const restaurant = table.restaurant;
-  const filteredMenus = selectedCategory
-    ? menus?.filter((m: any) => m.categoryId === selectedCategory)
-    : menus;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredMenus = menus
+    ?.filter((m: any) => !selectedCategory || m.categoryId === selectedCategory)
+    .filter(
+      (m: any) =>
+        !normalizedSearch ||
+        m.name.toLowerCase().includes(normalizedSearch) ||
+        m.description?.toLowerCase().includes(normalizedSearch)
+    );
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalCartPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -198,6 +191,35 @@ function OrderContent() {
           ))}
         </div>
 
+        {/* Search Menu */}
+        <div className="relative mb-4">
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari menu..."
+            className="w-full bg-surface border border-border rounded-sm pl-9 pr-9 py-2.5 text-sm outline-none focus:border-primary"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-foreground font-semibold text-sm"
+              aria-label="Hapus pencarian"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         {/* View mode toggle & List title */}
         <div className="flex justify-between items-center mb-4">
           <span className="text-xs font-bold uppercase tracking-wider text-secondary">
@@ -232,7 +254,9 @@ function OrderContent() {
           <div className="text-center py-10 text-secondary">Memuat daftar menu...</div>
         ) : filteredMenus?.length === 0 ? (
           <div className="text-center py-10 text-secondary border border-dashed border-border rounded p-4 bg-surface">
-            Tidak ada menu tersedia saat ini.
+            {normalizedSearch
+              ? `Tidak ada menu yang cocok dengan "${searchQuery}".`
+              : 'Tidak ada menu tersedia saat ini.'}
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-2 gap-4">
@@ -461,8 +485,8 @@ function OrderContent() {
                       <input
                         type="text"
                         placeholder="Catatan (misal: pedas, es sedikit)"
-                        defaultValue={item.notes || ''}
-                        onBlur={(e) => useAppStore.getState().updateCartNotes(item.id, e.target.value)}
+                        value={item.notes || ''}
+                        onChange={(e) => updateCartNotes(item.id, e.target.value)}
                         className="text-xs text-secondary bg-transparent border-b border-border focus:border-primary w-full py-1 mt-1 outline-none"
                       />
                     </div>
@@ -619,10 +643,9 @@ function OrderContent() {
               })()}
               <button
                 onClick={submitOrder}
-                disabled={createOrderMutation.isPending}
                 className="w-full bg-primary hover:bg-primary-hover text-white py-3 rounded-sm text-sm font-bold tracking-wider uppercase shadow-subtle transition-colors disabled:opacity-50"
               >
-                {createOrderMutation.isPending ? 'Mengirim Pesanan...' : 'Buat Pesanan & Bayar'}
+                Buat Pesanan & Bayar
               </button>
             </div>
           </div>
