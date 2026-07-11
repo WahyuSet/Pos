@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Patch, Delete, Body, Param } from '@nestjs/common';
 import { RestaurantService } from './restaurant.service';
-import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto } from './dto/restaurant.dto';
+import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto, UpdateRestaurantDto } from './dto/restaurant.dto';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@repo/types';
@@ -19,6 +19,12 @@ export class RestaurantController {
   @Get(':id')
   async getRestaurant(@Param('id') id: string) {
     return this.restaurantService.getRestaurant(id);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id')
+  async updateRestaurant(@Param('id') id: string, @Body() dto: UpdateRestaurantDto) {
+    return this.restaurantService.updateRestaurant(id, dto);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

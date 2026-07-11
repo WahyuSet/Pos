@@ -20,6 +20,7 @@ export default function AdminDashboard() {
   // Input states
   const [newCatName, setNewCatName] = useState('');
   const [newTableNum, setNewTableNum] = useState('');
+  const [restaurantProfileForm, setRestaurantProfileForm] = useState({ name: '', address: '', phone: '' });
   const [qrPreviewTable, setQrPreviewTable] = useState<{ id: string; number: string; qrCodeUrl: string } | null>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [newMenu, setNewMenu] = useState({
@@ -92,6 +93,16 @@ export default function AdminDashboard() {
     enabled: !!restaurantId,
   });
 
+  useEffect(() => {
+    if (restaurant) {
+      setRestaurantProfileForm({
+        name: restaurant.name || '',
+        address: restaurant.address || '',
+        phone: restaurant.phone || '',
+      });
+    }
+  }, [restaurant]);
+
   // Fetch Categories
   const { data: categories, isLoading: isCatsLoading } = useQuery({
     queryKey: ['admin-categories', restaurantId],
@@ -134,6 +145,15 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['admin-restaurant', restaurantId] });
     },
     onError: (err: any) => alert(err.message || 'Gagal memperbarui pengaturan pembayaran'),
+  });
+
+  const updateRestaurantProfileMutation = useMutation({
+    mutationFn: (data: { name?: string; address?: string; phone?: string }) =>
+      api.updateRestaurant(restaurantId!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-restaurant', restaurantId] });
+    },
+    onError: (err: any) => alert(err.message || 'Gagal memperbarui profil restoran'),
   });
 
   const addCategoryMutation = useMutation({
@@ -1246,6 +1266,61 @@ export default function AdminDashboard() {
         {/* Tab Content: Settings */}
         {activeSubTab === 'settings' && restaurant && (
           <div className="max-w-xl bg-surface border border-border p-6 rounded-md shadow-subtle space-y-6">
+            <div className="border-b border-border pb-6">
+              <div>
+                <h3 className="font-bold text-base text-slate-800 font-serif mb-1">Profil Restoran</h3>
+                <p className="text-xs text-secondary">
+                  Ubah identitas restoran yang tampil di halaman pemesanan, dashboard, dan nota.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <label className="block">
+                  <span className="text-[11px] font-bold text-slate-700 mb-1 block">Nama Restoran</span>
+                  <input
+                    type="text"
+                    value={restaurantProfileForm.name}
+                    onChange={(e) =>
+                      setRestaurantProfileForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    className="w-full border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[11px] font-bold text-slate-700 mb-1 block">Alamat</span>
+                  <input
+                    type="text"
+                    value={restaurantProfileForm.address}
+                    onChange={(e) =>
+                      setRestaurantProfileForm((prev) => ({ ...prev, address: e.target.value }))
+                    }
+                    className="w-full border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[11px] font-bold text-slate-700 mb-1 block">Telepon</span>
+                  <input
+                    type="tel"
+                    value={restaurantProfileForm.phone}
+                    onChange={(e) =>
+                      setRestaurantProfileForm((prev) => ({ ...prev, phone: e.target.value }))
+                    }
+                    className="w-full border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+
+                <button
+                  onClick={() => updateRestaurantProfileMutation.mutate(restaurantProfileForm)}
+                  disabled={updateRestaurantProfileMutation.isPending}
+                  className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-sm text-xs font-bold uppercase tracking-wider shadow-subtle transition-all disabled:opacity-60"
+                >
+                  {updateRestaurantProfileMutation.isPending ? 'Menyimpan...' : 'Simpan Profil'}
+                </button>
+              </div>
+            </div>
+
             <div>
               <h3 className="font-bold text-base text-slate-800 font-serif mb-1">Pengaturan Metode Pembayaran</h3>
               <p className="text-xs text-secondary">

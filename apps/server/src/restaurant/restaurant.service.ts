@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto } from './dto/restaurant.dto';
+import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto, UpdateRestaurantDto } from './dto/restaurant.dto';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -21,6 +21,14 @@ export class RestaurantService {
       throw new NotFoundException('Restoran tidak ditemukan');
     }
     return restaurant;
+  }
+
+  async updateRestaurant(id: string, dto: UpdateRestaurantDto) {
+    await this.getRestaurant(id);
+    return this.prisma.restaurant.update({
+      where: { id },
+      data: dto,
+    });
   }
 
   async createTable(restaurantId: string, dto: CreateTableDto) {

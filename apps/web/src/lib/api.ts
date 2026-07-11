@@ -43,6 +43,11 @@ export const api = {
 
   // Restaurant
   getRestaurant: (id: string) => fetchApi(`/restaurants/${id}`),
+  updateRestaurant: (restaurantId: string, data: any) =>
+    fetchApi(`/restaurants/${restaurantId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   getTables: (restaurantId: string) => fetchApi(`/restaurants/${restaurantId}/tables`),
   getTable: (tableId: string) => fetchApi(`/restaurants/tables/${tableId}`),
   createTable: (restaurantId: string, tableNumber: string) =>

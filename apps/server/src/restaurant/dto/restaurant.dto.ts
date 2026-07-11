@@ -14,6 +14,20 @@ export class CreateRestaurantDto {
   phone?: string;
 }
 
+export class UpdateRestaurantDto {
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+}
+
 export class CreateTableDto {
   @IsString()
   @IsNotEmpty()
