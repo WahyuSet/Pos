@@ -1,15 +1,89 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@repo/database';
+import { Role } from '@repo/types';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto, UpdateRestaurantDto } from './dto/restaurant.dto';
+import { AuthService } from '../auth/auth.service';
+import {
+  CreateRestaurantDto,
+  CreateTableDto,
+  UpdatePaymentSettingsDto,
+  UpdateRestaurantDto,
+  UpdateRestaurantStatusDto,
+} from './dto/restaurant.dto';
 import { randomUUID } from 'crypto';
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'restoran';
+}
 
 @Injectable()
 export class RestaurantService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private authService: AuthService,
+  ) {}
 
   async createRestaurant(dto: CreateRestaurantDto) {
-    return this.prisma.restaurant.create({
-      data: dto,
+    const baseSlug = slugify(dto.slug || dto.name);
+
+    try {
+      const { restaurant, owner } = await this.prisma.$transaction(async (tx) => {
+        let slug = baseSlug;
+        let suffix = 1;
+        while (await tx.restaurant.findUnique({ where: { slug } })) {
+          suffix += 1;
+          slug = `${baseSlug}-${suffix}`;
+        }
+
+        const restaurant = await tx.restaurant.create({
+          data: {
+            name: dto.name,
+            slug,
+            address: dto.address,
+            phone: dto.phone,
+          },
+        });
+
+        const passwordHash = await bcrypt.hash(dto.ownerPassword, 10);
+        const owner = await tx.user.create({
+          data: {
+            restaurantId: restaurant.id,
+            username: dto.ownerUsername,
+            passwordHash,
+            name: dto.ownerName,
+            role: Role.OWNER,
+          },
+        });
+
+        return { restaurant, owner };
+      });
+
+      return this.authService.issueSession(owner);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Kode restoran atau username sudah digunakan');
+      }
+      throw err;
+    }
+  }
+
+  async listRestaurants() {
+    return this.prisma.restaurant.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { users: true, orders: true } } },
+    });
+  }
+
+  async updateStatus(id: string, dto: UpdateRestaurantStatusDto) {
+    await this.getRestaurant(id);
+    return this.prisma.restaurant.update({
+      where: { id },
+      data: { isActive: dto.isActive },
     });
   }
 

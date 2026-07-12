@@ -97,7 +97,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (!token || ![Role.OWNER, Role.MANAGER, Role.SUPER_ADMIN].includes(user?.role as any)) {
+    if (!token || ![Role.OWNER, Role.MANAGER].includes(user?.role as any)) {
       router.push('/login');
     }
   }, [token, user, router]);
@@ -441,81 +441,85 @@ export default function AdminDashboard() {
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
-        {/* Navigation SubTabs */}
-        <div className="flex gap-2 border-b border-border pb-px">
-          <button
-            onClick={() => setActiveSubTab('menu')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'menu'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Manajemen Menu ({menus?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('categories')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'categories'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Kategori ({categories?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('tables')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'tables'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Meja / QR Code ({tables?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('vouchers')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'vouchers'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Voucher ({vouchers?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('staff')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'staff'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Staff ({users?.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('laporan')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'laporan'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Laporan
-          </button>
-          <button
-            onClick={() => setActiveSubTab('settings')}
-            className={`px-6 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-              activeSubTab === 'settings'
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-secondary hover:text-foreground'
-            }`}
-          >
-            Pengaturan Pembayaran
-          </button>
-        </div>
+      <main className="flex-1 p-6 max-w-7xl w-full mx-auto flex flex-col lg:flex-row gap-6">
+        {/* Sidebar Navigation */}
+        <aside className="w-full lg:w-56 shrink-0">
+          <div className="flex flex-row flex-wrap lg:flex-col gap-1">
+            <button
+              onClick={() => setActiveSubTab('menu')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'menu'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Manajemen Menu ({menus?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('categories')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'categories'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Kategori ({categories?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('tables')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'tables'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Meja / QR Code ({tables?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('vouchers')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'vouchers'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Voucher ({vouchers?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('staff')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'staff'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Staff ({users?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('laporan')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'laporan'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Laporan
+            </button>
+            <button
+              onClick={() => setActiveSubTab('settings')}
+              className={`w-full text-left px-4 py-3 border-l-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                activeSubTab === 'settings'
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-secondary hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Pengaturan Pembayaran
+            </button>
+          </div>
+        </aside>
 
+        {/* Content */}
+        <div className="flex-1 min-w-0 space-y-6">
         {/* Tab Content: Menu */}
         {activeSubTab === 'menu' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1926,6 +1930,7 @@ export default function AdminDashboard() {
             </div>
           );
         })()}
+        </div>
       </main>
     </div>
   );

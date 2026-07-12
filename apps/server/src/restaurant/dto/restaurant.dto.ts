@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, MinLength } from 'class-validator';
 
 export class CreateRestaurantDto {
   @IsString()
@@ -7,11 +7,27 @@ export class CreateRestaurantDto {
 
   @IsString()
   @IsOptional()
+  slug?: string;
+
+  @IsString()
+  @IsOptional()
   address?: string;
 
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ownerName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ownerUsername!: string;
+
+  @IsString()
+  @MinLength(6)
+  ownerPassword!: string;
 }
 
 export class UpdateRestaurantDto {
@@ -26,6 +42,11 @@ export class UpdateRestaurantDto {
   @IsString()
   @IsOptional()
   phone?: string;
+}
+
+export class UpdateRestaurantStatusDto {
+  @IsBoolean()
+  isActive!: boolean;
 }
 
 export class CreateTableDto {

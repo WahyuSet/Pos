@@ -18,6 +18,7 @@ async function main() {
   const restaurant = await prisma.restaurant.create({
     data: {
       name: 'Rumah Makan Padang Minang Raya',
+      slug: 'minang-raya',
       address: 'Jl. Sudirman No. 45, Jakarta Selatan',
       phone: '021-5551234',
     },
@@ -57,7 +58,17 @@ async function main() {
     },
   });
 
-  console.log('Created Users: admin, kasir, dapur');
+  const superAdmin = await prisma.user.create({
+    data: {
+      restaurantId: restaurant.id,
+      username: 'superadmin',
+      passwordHash,
+      name: 'Platform Owner',
+      role: 'SUPER_ADMIN',
+    },
+  });
+
+  console.log('Created Users: admin, kasir, dapur, superadmin');
 
   const table1 = await prisma.table.create({
     data: {

@@ -1,6 +1,12 @@
 import { Controller, Post, Get, Patch, Delete, Body, Param } from '@nestjs/common';
 import { RestaurantService } from './restaurant.service';
-import { CreateRestaurantDto, CreateTableDto, UpdatePaymentSettingsDto, UpdateRestaurantDto } from './dto/restaurant.dto';
+import {
+  CreateRestaurantDto,
+  CreateTableDto,
+  UpdatePaymentSettingsDto,
+  UpdateRestaurantDto,
+  UpdateRestaurantStatusDto,
+} from './dto/restaurant.dto';
 import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@repo/types';
@@ -15,6 +21,12 @@ export class RestaurantController {
     return this.restaurantService.createRestaurant(dto);
   }
 
+  @Roles(Role.SUPER_ADMIN)
+  @Get()
+  async listRestaurants() {
+    return this.restaurantService.listRestaurants();
+  }
+
   @Public()
   @Get(':id')
   async getRestaurant(@Param('id') id: string) {
@@ -25,6 +37,12 @@ export class RestaurantController {
   @Patch(':id')
   async updateRestaurant(@Param('id') id: string, @Body() dto: UpdateRestaurantDto) {
     return this.restaurantService.updateRestaurant(id, dto);
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @Patch(':id/status')
+  async updateStatus(@Param('id') id: string, @Body() dto: UpdateRestaurantStatusDto) {
+    return this.restaurantService.updateStatus(id, dto);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

@@ -29,14 +29,33 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
 
 export const api = {
   // Auth
-  login: (credentials: any) =>
+  login: (credentials: { restaurantSlug: string; username: string; password: string }) =>
     fetchApi('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
-  
+
   // Restaurant
+  registerRestaurant: (data: {
+    name: string;
+    slug?: string;
+    address?: string;
+    phone?: string;
+    ownerName: string;
+    ownerUsername: string;
+    ownerPassword: string;
+  }) =>
+    fetchApi('/restaurants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getRestaurant: (id: string) => fetchApi(`/restaurants/${id}`),
+  getRestaurants: () => fetchApi('/restaurants'),
+  updateRestaurantStatus: (id: string, isActive: boolean) =>
+    fetchApi(`/restaurants/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive }),
+    }),
   updateRestaurant: (restaurantId: string, data: any) =>
     fetchApi(`/restaurants/${restaurantId}`, {
       method: 'PATCH',

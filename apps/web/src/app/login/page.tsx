@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '../../lib/api';
@@ -11,21 +11,31 @@ export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAppStore((state) => state.setAuth);
 
+  const [restaurantSlug, setRestaurantSlug] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get('slug');
+    if (slug) {
+      setRestaurantSlug(slug);
+    }
+  }, []);
+
   const loginMutation = useMutation({
-    mutationFn: () => api.login({ username, password }),
+    mutationFn: () => api.login({ restaurantSlug, username, password }),
     onSuccess: (data) => {
       setAuth(data.user, data.accessToken);
       
       const role = data.user.role;
-      if (role === Role.CASHIER) {
+      if (role === Role.SUPER_ADMIN) {
+        router.push('/dashboard/platform');
+      } else if (role === Role.CASHIER) {
         router.push('/dashboard/cashier');
       } else if (role === Role.KITCHEN) {
         router.push('/dashboard/kitchen');
-      } else if ([Role.OWNER, Role.MANAGER, Role.SUPER_ADMIN].includes(role)) {
+      } else if ([Role.OWNER, Role.MANAGER].includes(role)) {
         router.push('/dashboard/admin');
       } else {
         router.push('/');
@@ -39,7 +49,7 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!username || !password) {
+    if (!restaurantSlug || !username || !password) {
       setErrorMsg('Semua kolom harus diisi.');
       return;
     }
@@ -63,6 +73,19 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              Kode Restoran
+            </label>
+            <input
+              type="text"
+              value={restaurantSlug}
+              onChange={(e) => setRestaurantSlug(e.target.value)}
+              placeholder="mis. minang-raya"
+              className="w-full bg-white border border-border rounded-sm px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-slate-300"
+            />
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
               Username
@@ -98,7 +121,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-[10px] text-secondary border-t border-border pt-4">
+        <div className="mt-4 text-center text-xs text-secondary">
+          Belum punya restoran?{' '}
+          <a href="/register" className="text-primary font-semibold hover:underline">
+            Daftar di sini
+          </a>
+        </div>
+
+        <div className="mt-4 text-center text-[10px] text-secondary border-t border-border pt-4">
           POSKita CorpScale Design System. All rights reserved.
         </div>
       </div>
