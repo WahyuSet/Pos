@@ -8,6 +8,25 @@
 
 ## 🆕 Update Log
 
+**2026-07-12** — **Panel Platform Owner** (item 🟢 Nice-to-have, dibangun setelah Multi-tenant selesai): halaman baru `/dashboard/platform`, khusus role `SUPER_ADMIN`, untuk melihat & mengelola semua tenant yang terdaftar — sebelumnya `Role.SUPER_ADMIN` sudah ada di enum dan `TenantGuard` sudah bypass untuk role ini, tapi tidak ada fitur nyata yang memakainya (tidak ada endpoint list-all, tidak ada user SUPER_ADMIN, tidak ada halaman).
+- **Keputusan desain**: SUPER_ADMIN tetap "menumpang" di satu restoran (di-seed di tenant `minang-raya`, username `superadmin`) alih-alih dibuatkan restoran mandiri baru — supaya login flow yang sudah wajib `restaurantSlug` tidak perlu diubah/dicabang. Konsekuensinya, semua pengecekan `restaurant.isActive` (lihat di bawah) **sengaja mengecualikan role SUPER_ADMIN** — supaya menonaktifkan tenant tempat SUPER_ADMIN menumpang tidak pernah mengunci akun platform itu sendiri. Efek samping kecil: akun `superadmin` ikut muncul di tab Staff restoran `minang-raya` (read-only di sana, karena `ASSIGNABLE_ROLES` sudah mengecualikan SUPER_ADMIN dari aksi edit/nonaktifkan) — diterima demi menghindari perubahan besar ke model data (`User.restaurantId` tetap wajib, tidak dibuat nullable).
+- **Schema**: `Restaurant.isActive` (`Boolean @default(true)`) — kolom baru non-destruktif (ada default, tidak perlu hapus `dev.db`), pola identik `User.isActive` yang sudah ada duluan untuk staff.
+- Backend: dua endpoint baru di `restaurant.controller.ts`, keduanya `@Roles(Role.SUPER_ADMIN)` — `GET /restaurants` (list semua tenant + `_count.users`/`_count.orders` lewat Prisma `include`, tanpa join berat) dan `PATCH /restaurants/:id/status` (endpoint terpisah dari `PATCH /restaurants/:id` yang dipakai OWNER/MANAGER — sengaja dipisah supaya OWNER/MANAGER tidak bisa mengaktifkan-ulang restorannya sendiri lewat endpoint update biasa).
+- **Enforcement `isActive` tenant, sama polanya dengan `User.isActive`**: di `AuthService.login` (dicek setelah password valid, supaya tebakan password salah tidak membocorkan status tenant → 401 "Restoran tidak aktif, hubungi admin platform") **dan** di `JwtStrategy.validate` (re-query `User` + `include: { restaurant: true }` di tiap request, supaya sesi yang sudah aktif langsung terputus begitu tenant dinonaktifkan — bukan cuma blokir login baru). Keduanya skip pengecekan untuk `role === SUPER_ADMIN` (lihat keputusan desain di atas).
+- Frontend: `login/page.tsx` sekarang redirect SUPER_ADMIN ke `/dashboard/platform` (dipisah dari grup OWNER/MANAGER yang tetap ke `/dashboard/admin`); `dashboard/admin/page.tsx` guard-nya juga dilepas dari SUPER_ADMIN (halaman itu sekarang eksklusif OWNER/MANAGER). Halaman baru `apps/web/src/app/dashboard/platform/page.tsx` — satu tabel tenant (nama, slug, jumlah staff, jumlah order, tanggal daftar, badge status Aktif/Nonaktif, tombol Aktifkan/Nonaktifkan), styling & pola `useMutation`/`invalidateQueries` disalin persis dari tab Staff di admin dashboard. Tidak ada tombol hapus tenant permanen — konsisten dengan konvensi "nonaktifkan, bukan hapus" yang sudah dipakai untuk `User`/`Voucher`.
+- Diverifikasi end-to-end via API: login SUPER_ADMIN redirect benar, `GET /restaurants` 403 untuk OWNER biasa, daftar tenant baru → nonaktifkan → login owner tenant itu ditolak (401, pesan sesuai) **dan** token yang sudah aktif langsung ter-cutoff di endpoint terproteksi (401) tanpa perlu logout manual, aktifkan lagi → login & sesi normal kembali, akun SUPER_ADMIN sendiri tidak pernah terkunci walau tenant tempatnya menumpang (`minang-raya`) dinonaktifkan. Typecheck `server`+`web` bersih, halaman `/dashboard/platform` sukses di-render dev server (200, 0 compile error).
+
+**2026-07-12** — **Multi-tenant / Multi-restoran** (item 🔴 KRITIS #1, terakhir tersisa, sekarang selesai — semua item KRITIS beres): sistem sekarang bisa handle banyak restoran, masing-masing terisolasi. Riset awal (grep skema + kode) menemukan kabar baik: data layer sudah tenant-shaped dari lama (`Restaurant`/`User`/`Table`/`Category`/`Menu`/`Order`/`Voucher` semua sudah punya `restaurantId`, JWT payload sudah bawa `restaurantId`, semua controller resource sudah pakai route `restaurants/:restaurantId/...`) — jadi kerjaan intinya cuma menutup 4 celah, bukan membangun ulang dari nol.
+- **Schema**: `Restaurant.slug` (unik, url-safe) ditambah untuk disambiguasi tenant. `User.username` yang tadinya unik **global** (`@unique`) diubah jadi unik **per-restoran** (`@@unique([restaurantId, username])`) — sekarang dua restoran boleh sama-sama punya user `admin`.
+- **Registrasi restoran baru jadi atomik**: `POST /restaurants` (sebelumnya endpoint publik yatim-piatu, tidak dipanggil dari manapun, cuma bikin row `Restaurant` tanpa user) sekarang jadi flow lengkap — dalam satu `$transaction`, bikin `Restaurant` (slug auto-generate dari nama + suffix kalau collision) **dan** user `OWNER` pertamanya sekaligus, langsung return session (`accessToken`/`refreshToken`/`user`) supaya frontend bisa auto-login tanpa round-trip login terpisah. `RestaurantModule` sekarang `imports: [AuthModule]` untuk reuse token-signing.
+- **Login butuh `restaurantSlug`**: `LoginDto` dan form login (`apps/web/src/app/login/page.tsx`) dapat field baru "Kode Restoran". `AuthService.login` sekarang resolve `Restaurant` by slug dulu, baru cari `User` lewat compound key `restaurantId_username` — bukan `findUnique({ username })` global seperti sebelumnya. **Keputusan desain**: dipilih field slug di form yang sudah ada (bisa di-prefill dari `?slug=` di URL), **bukan** dynamic route `/login/[slug]` atau subdomain — karena `next.config.ts` kosong (tidak ada infra rewrite) dan seluruh app pakai flat routes tanpa `[param]` sama sekali, jadi ini 90% manfaat UX dengan 10% kompleksitas.
+- **`TenantGuard` baru** (`apps/server/src/auth/tenant.guard.ts`), didaftarkan sebagai `APP_GUARD` ketiga (setelah `JwtAuthGuard`, `RolesGuard`) — cross-check `req.user.restaurantId` vs `:restaurantId`/`:id` di route param, short-circuit `true` untuk route `@Public()` dan route tanpa param restoran. **Ini nutup celah nyata**: sebelumnya endpoint create seperti `POST /restaurants/:id/users` cuma dicek `@Roles(OWNER, MANAGER)`, tidak ada yang cegah OWNER restoran A membuat user di restoran B kalau tahu ID-nya. Guard ini melengkapi (bukan mengganti) manual check `row.restaurantId !== restaurantId` yang sudah ada di tiap service untuk nested ownership (menu/order/dll).
+- **Endpoint publik tetap publik by design**: `GET .../menus`, `.../categories`, `.../tables`, order create/get/cancel, payment simulate — semua ini `@Public()` dan **sengaja** bisa diakses cross-tenant tanpa token (perlu untuk flow QR customer yang scan menu tanpa login). Ini bukan celah keamanan; `TenantGuard` mengenali dan skip route-route ini. Sempat salah duga saat verifikasi awal (`GET .../menus` restoran lain "bocor" tanpa token) sebelum sadar itu memang perilaku yang diinginkan, bukan bug.
+- Flow QR customer (`order/page.tsx`, `order/status/page.tsx`, `GET /restaurants/tables/:tableId`) **tidak disentuh** — `Table.id` tetap UUID global, sudah cukup untuk N restoran tanpa perlu restaurantId di URL.
+- Frontend: halaman baru `apps/web/src/app/register/page.tsx` (form nama restoran + slug auto-suggest + data owner, styling identik dengan `login/page.tsx`, submit langsung auto-login + redirect ke `/dashboard/admin`), link silang "Daftar"/"Masuk" di kedua halaman.
+- **Migrasi lokal destruktif**: karena `Restaurant.slug` kolom unik baru tanpa data lama, `dev.db` dihapus lalu `db:generate`+`db:push`+`db:seed` ulang (proyek ini tidak pakai `prisma migrate`, tidak ada folder `migrations/` — workflownya `db push` + reseed dari nol). Aman karena belum ada data produksi. `seed.ts` sekarang kasih `slug: 'minang-raya'` ke restoran seed.
+- Diverifikasi end-to-end via API: daftar restoran baru dengan username `admin` yang sudah dipakai restoran seed (201, sukses — bukti scoping per-tenant), login ke kedua restoran dengan username sama menghasilkan JWT `sub`/`restaurantId` berbeda, endpoint role-protected (`GET .../users`) terisolasi benar dan `TenantGuard` menolak akses cross-tenant (403) baik untuk read maupun create, endpoint public tetap bisa diakses tanpa token. Typecheck `server`+`web` bersih, halaman `/login` dan `/register` sukses di-render dev server (200).
+
 **2026-07-12** — **Manajemen User/Staff** (item 🔴 KRITIS #1, sekarang selesai): tab "Staff" baru di admin dashboard untuk CRUD akun kasir/dapur/pelayan/manajer — sebelumnya user cuma bisa dibuat lewat `seed.ts`.
 - Backend: modul baru `apps/server/src/user/` (`user.module.ts`/`user.controller.ts`/`user.service.ts`/`dto/user.dto.ts`), tiga endpoint di bawah `@Roles(OWNER, MANAGER)`: `POST/GET/PATCH /restaurants/:id/users`. Role yang boleh di-assign dibatasi ke `MANAGER|CASHIER|KITCHEN|WAITER` lewat `@IsIn(ASSIGNABLE_ROLES)` di DTO (bukan `@IsEnum(Role)`) — OWNER/SUPER_ADMIN tidak bisa dibuat/di-assign dari endpoint ini sama sekali, divalidasi di layer DTO jadi tidak bisa di-bypass lewat request langsung.
 - **Nonaktifkan, bukan hapus permanen**: tambah kolom `User.isActive` (`Boolean @default(true)`, migrasi via `prisma db push`), tombol Aktifkan/Nonaktifkan di tabel Staff — keputusan eksplisit user untuk konsistensi dengan pola `Voucher.isActive` yang sudah ada, dan menghindari resiko hapus permanen yang salah sasaran. **Tidak ada endpoint/tombol hapus staff.**
@@ -102,7 +121,9 @@ g:/Project/post/
 │       │   ├── order/page.tsx              — Pemesanan customer (QR → menu → keranjang)
 │       │   ├── order/status/page.tsx       — Status pesanan + konfirmasi + tracker
 │       │   ├── receipt/page.tsx            — Nota print-friendly (dibuka dari dashboard kasir)
-│       │   ├── dashboard/admin/page.tsx    — Panel admin
+│       │   ├── register/page.tsx           — Registrasi tenant baru (auto-login setelah daftar)
+│       │   ├── dashboard/admin/page.tsx    — Panel admin (OWNER/MANAGER, per-tenant)
+│       │   ├── dashboard/platform/page.tsx — Panel platform owner (SUPER_ADMIN, lintas-tenant)
 │       │   ├── dashboard/cashier/page.tsx  — Dashboard kasir
 │       │   └── dashboard/kitchen/page.tsx  — Dashboard dapur (KDS)
 │       └── lib/
@@ -135,6 +156,10 @@ g:/Project/post/
   - Profil Restoran: ubah nama, alamat, telepon
 - Tab Laporan: kartu ringkasan (total pendapatan, total pesanan, rata-rata/pesanan), chart pendapatan harian (custom CSS), tabel menu terlaris, rekap per metode pembayaran. Kontrol rentang tanggal quick-select (Hari Ini/7 Hari/30 Hari) + date input manual.
 - Tab Staff: CRUD akun kasir/dapur/pelayan/manajer (username, nama, password, role), toggle Aktifkan/Nonaktifkan (bukan hapus permanen — tidak ada tombol Hapus). OWNER/SUPER_ADMIN tidak bisa dibuat/dikelola dari tab ini.
+
+### Panel Platform Owner (/dashboard/platform)
+- Khusus role SUPER_ADMIN — tabel semua tenant (nama, slug, jumlah staff, jumlah order, tanggal daftar, status Aktif/Nonaktif), tombol Aktifkan/Nonaktifkan per tenant (bukan hapus permanen).
+- Tenant yang dinonaktifkan: semua staff-nya langsung tidak bisa login, dan sesi yang sedang aktif langsung terputus (tidak perlu tunggu token expired).
 
 ### Customer Order (/order?tableId=[ID])
 - Tampil daftar menu, filter kategori + search teks (nama/deskripsi, client-side, digabung AND dengan filter kategori)
@@ -186,26 +211,22 @@ Dua mode, dibedakan dari ada/tidaknya `orderId` di query string:
 
 > Item **Manajemen User/Staff** sudah selesai dibangun (lihat 🆕 Update Log 2026-07-12) dan dihapus dari daftar ini.
 
-### 🔴 KRITIS — Harus Dibangun
-
-1. **Multi-tenant / Multi-restoran**
-   - Sistem hanya handle 1 restoran (seed hanya buat 1 data)
-   - Solusi: Flow registrasi restoran baru, routing per restaurantId
+> Item **Multi-tenant / Multi-restoran** sudah selesai dibangun (lihat 🆕 Update Log 2026-07-12) dan dihapus dari daftar ini — semua item 🔴 KRITIS sekarang selesai.
 
 ### 🟡 PENTING — Perlu Ditingkatkan
 
-2. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
+1. **Pagination (ditunda sengaja — lihat 🆕 Update Log)**
    - Semua data diload sekaligus (pesanan, menu). Menu cuma 7 item dan sudah pakai search+filter client-side (butuh data lengkap, jangan paginate GET /menus tanpa rework search jadi server-side dulu). Order history ("Riwayat Selesai" kasir) yang berpotensi membengkak seiring waktu — itu satu-satunya target yang masuk akal kalau dikerjakan nanti.
    - Solusi (kalau/waktu dikerjakan): offset pagination + tombol "Muat Lebih Banyak" khusus di GET /orders untuk tab Riwayat Selesai kasir, bukan rewrite semua endpoint sekaligus
 
 ### 🟢 NICE TO HAVE
 
-3. Dark Mode — CSS variables untuk dark mode + toggle
-4. Riwayat Pesanan Customer — simpan orderId di localStorage
-5. Estimasi Waktu Masak — field menit di Menu
-6. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
-7. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
-8. Dashboard untuk role WAITER — role ini bisa dibuat lewat tab Staff tapi belum ada route dashboard khusus (`apps/web/src/app/login/page.tsx` fallback ke `/`)
+2. Dark Mode — CSS variables untuk dark mode + toggle
+3. Riwayat Pesanan Customer — simpan orderId di localStorage
+4. Estimasi Waktu Masak — field menit di Menu
+5. Payment Gateway Nyata — Midtrans/Xendit untuk QRIS, E-Wallet, Bank Transfer
+6. Flash Sale / Diskon per-Menu — voucher saat ini hanya persentase di seluruh subtotal, belum per-item/kategori
+7. Dashboard untuk role WAITER — role ini bisa dibuat lewat tab Staff tapi belum ada route dashboard khusus (`apps/web/src/app/login/page.tsx` fallback ke `/`)
 
 ---
 
@@ -213,10 +234,11 @@ Dua mode, dibedakan dari ada/tidaknya `orderId` di query string:
 
 `
 Restaurant
-  ├── id, name, address, phone
+  ├── id, name, slug (unik, dipakai login), address, phone
   ├── enableCash, enableQris, enableEWallet, enableBankTransfer
   ├── enableTax (Boolean, default false)
-  └── taxRate (Float, default 10.0)
+  ├── taxRate (Float, default 10.0)
+  └── isActive (Boolean, default true — nonaktif = semua staff tenant ini tidak bisa login & sesi aktif langsung terputus; dikelola dari Panel Platform Owner, khusus SUPER_ADMIN)
 
 User (Staff)
   ├── role: OWNER | MANAGER | CASHIER | KITCHEN | WAITER
@@ -256,6 +278,9 @@ Payment
 | Admin/Owner | admin | password123 |
 | Kasir | kasir | password123 |
 | Dapur | dapur | password123 |
+| Super Admin (Platform) | superadmin | password123 |
+
+Semua akun demo di atas login dengan Kode Restoran (slug) `minang-raya`.
 
 ---
 
@@ -286,6 +311,8 @@ Payment
 - GET /restaurants/:id/reports/summary?from=&to=  (Owner/Manager — laporan penjualan)
 - POST/GET /restaurants/:id/users  (Owner/Manager — kelola staff, role dibatasi Manager/Kasir/Dapur/Pelayan)
 - PATCH /restaurants/:id/users/:userId  (Owner/Manager — edit staff, toggle isActive; tidak bisa nonaktifkan diri sendiri atau kelola akun Owner/Super Admin)
+- GET /restaurants  (Super Admin — list semua tenant + jumlah staff/order, untuk Panel Platform Owner)
+- PATCH /restaurants/:id/status  (Super Admin — aktifkan/nonaktifkan tenant; terpisah dari PATCH /restaurants/:id biasa)
 
 ---
 
